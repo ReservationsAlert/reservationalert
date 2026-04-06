@@ -430,7 +430,8 @@
 <!-- ── New Watch Modal ──────────────────── -->
 <div class="modal-overlay" id="modal">
     <div class="modal">
-        <div class="modal-title">Create New Watch</div>
+        <div class="modal-title" id="modal-title">Create New Watch</div>
+        <input type="hidden" id="editing-watch-id" value="">
 
         <div class="form-group">
             <label class="form-label">What are you looking for?</label>
@@ -512,7 +513,7 @@
 
         <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
             <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="createWatch()">Start Watching</button>
+            <button class="btn btn-primary" id="modal-submit-btn" onclick="submitWatch()">Start Watching</button>
         </div>
     </div>
 </div>
@@ -587,6 +588,7 @@ function renderWatches() {
                 ${w.status}
             </span>
             <div class="watch-actions">
+                <button class="btn-icon" title="Edit" onclick="editWatch('${w.id}')">✏️</button>
                 <button class="btn-icon" title="Check now" onclick="triggerCheck('${w.id}')">🔄</button>
                 <button class="btn-icon" title="${w.status === 'active' ? 'Pause' : 'Resume'}" onclick="toggleWatch('${w.id}', '${w.status}')">
                     ${w.status === 'active' ? '⏸' : '▶️'}
@@ -642,7 +644,8 @@ function renderRecentActivity() {
 }
 
 // ── Actions ────────────────────────────────
-async function createWatch() {
+async function submitWatch() {
+    const editId = document.getElementById('editing-watch-id').value;
     const data = {
         watch_type: selectedType,
         name: document.getElementById('watch-name').value,
@@ -661,10 +664,41 @@ async function createWatch() {
         return;
     }
 
-    await api('/watches', { method: 'POST', body: data });
+    if (editId) {
+        await api(`/watches/${editId}`, { method: 'PUT', body: data });
+    } else {
+        await api('/watches', { method: 'POST', body: data });
+    }
     closeModal();
-    clearForm();
     loadAll();
+}
+
+function editWatch(id) {
+    const w = watches.find(w => w.id === id);
+    if (!w) return;
+
+    // Pre-fill the form
+    document.getElementById('watch-name').value = w.name || '';
+    document.getElementById('watch-url').value = w.url || '';
+    document.getElementById('watch-date').value = w.target_date || '';
+    document.getElementById('watch-time').value = w.target_time || '19:00';
+    document.getElementById('watch-party').value = w.party_size || 2;
+    document.getElementById('watch-email').value = w.user_email || '';
+    document.getElementById('watch-notify').value = w.notify_via || 'email';
+    document.getElementById('watch-phone').value = w.phone || '';
+    document.getElementById('watch-pattern').value = w.check_pattern || '';
+
+    // Select the correct type card
+    selectedType = w.watch_type || 'custom';
+    document.querySelectorAll('.type-card').forEach(c => {
+        c.classList.toggle('selected', c.dataset.type === selectedType);
+    });
+
+    // Show/hide phone group
+    document.getElementById('phone-group').style.display =
+        (w.notify_via === 'sms' || w.notify_via === 'both') ? '' : 'none';
+
+    openModal(id);
 }
 
 async function deleteWatch(id) {
@@ -686,8 +720,17 @@ async function triggerCheck(id) {
 }
 
 // ── Modal ──────────────────────────────────
-function openModal() { document.getElementById('modal').classList.add('open'); }
-function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function openModal(editId = null) {
+    document.getElementById('editing-watch-id').value = editId || '';
+    document.getElementById('modal-title').textContent = editId ? 'Edit Watch' : 'Create New Watch';
+    document.getElementById('modal-submit-btn').textContent = editId ? 'Save Changes' : 'Start Watching';
+    document.getElementById('modal').classList.add('open');
+}
+function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+    document.getElementById('editing-watch-id').value = '';
+    clearForm();
+}
 
 function selectType(el) {
     document.querySelectorAll('.type-card').forEach(c => c.classList.remove('selected'));
