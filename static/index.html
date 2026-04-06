@@ -493,8 +493,12 @@
 
         <div class="form-row">
             <div class="form-group">
-                <label class="form-label">Target Date</label>
-                <input type="date" class="form-input" id="watch-date">
+                <label class="form-label">From Date</label>
+                <input type="date" class="form-input" id="watch-date-from">
+            </div>
+            <div class="form-group">
+                <label class="form-label">To Date</label>
+                <input type="date" class="form-input" id="watch-date-to">
             </div>
             <div class="form-group" id="time-group">
                 <label class="form-label">Preferred Time</label>
@@ -605,7 +609,7 @@ function renderWatches() {
             <div class="watch-details">
                 <div class="watch-name">${esc(w.name)}</div>
                 <div class="watch-meta">
-                    ${w.target_date ? `<span>📅 ${w.target_date}</span>` : ''}
+                    ${w.date_from && w.date_to ? `<span>📅 ${w.date_from} → ${w.date_to}</span>` : w.date_from ? `<span>📅 From ${w.date_from}</span>` : w.date_to ? `<span>📅 Until ${w.date_to}</span>` : w.target_date ? `<span>📅 ${w.target_date}</span>` : ''}
                     ${w.target_time ? `<span>🕐 ${w.target_time}</span>` : ''}
                     ${w.party_size ? `<span>👥 ${w.party_size}</span>` : ''}
                     <span>📧 ${esc(w.user_email)}</span>
@@ -701,7 +705,8 @@ async function submitWatch() {
         watch_type: selectedType,
         name: document.getElementById('watch-name').value,
         url: document.getElementById('watch-url').value,
-        target_date: document.getElementById('watch-date').value,
+        date_from: document.getElementById('watch-date-from').value,
+        date_to: document.getElementById('watch-date-to').value,
         target_time: document.getElementById('watch-time').value,
         party_size: parseInt(document.getElementById('watch-party').value),
         user_email: document.getElementById('watch-email').value,
@@ -731,7 +736,8 @@ function editWatch(id) {
     // Pre-fill the form
     document.getElementById('watch-name').value = w.name || '';
     document.getElementById('watch-url').value = w.url || '';
-    document.getElementById('watch-date').value = w.target_date || '';
+    document.getElementById('watch-date-from').value = w.date_from || w.target_date || '';
+    document.getElementById('watch-date-to').value = w.date_to || w.target_date || '';
     document.getElementById('watch-time').value = w.target_time || '19:00';
     document.getElementById('watch-party').value = w.party_size || 2;
     document.getElementById('watch-email').value = w.user_email || '';
@@ -794,7 +800,7 @@ function selectType(el) {
 }
 
 function clearForm() {
-    ['watch-name', 'watch-url', 'watch-date', 'watch-email', 'watch-phone', 'watch-pattern'].forEach(id => {
+    ['watch-name', 'watch-url', 'watch-date-from', 'watch-date-to', 'watch-email', 'watch-phone', 'watch-pattern'].forEach(id => {
         document.getElementById(id).value = '';
     });
     document.getElementById('watch-time').value = '19:00';

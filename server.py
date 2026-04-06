@@ -46,7 +46,9 @@ def init_db():
             watch_type TEXT NOT NULL,         -- 'restaurant' | 'campground' | 'custom'
             name TEXT NOT NULL,               -- friendly name
             url TEXT NOT NULL,                -- URL to monitor
-            target_date TEXT,                 -- desired date (YYYY-MM-DD)
+            target_date TEXT,                 -- desired date (YYYY-MM-DD) — legacy, use date_from/date_to
+            date_from TEXT,                   -- start of desired date range (YYYY-MM-DD)
+            date_to TEXT,                     -- end of desired date range (YYYY-MM-DD)
             target_time TEXT,                 -- desired time for restaurants
             party_size INTEGER DEFAULT 2,
             check_pattern TEXT,               -- CSS selector or text pattern to look for
@@ -156,6 +158,13 @@ class MonitorEngine:
                 available, details = self._check_campground(html, watch)
             else:
                 available, details = self._check_custom(html, watch)
+
+            # If availability was found, verify dates on page fall within the desired range
+            if available and (watch.get("date_from") or watch.get("date_to")):
+                in_range, date_details = self._check_date_range(html, watch)
+                if not in_range:
+                    available = False
+                    details = date_details
 
         except urllib.error.HTTPError as e:
             details = f"HTTP {e.code}: {e.reason}"
@@ -275,6 +284,88 @@ class MonitorEngine:
             return True, f"Pattern matched: {watch['check_pattern']}"
         return False, f"Pattern not found: {watch['check_pattern']}"
 
+    def _check_date_range(self, html, watch):
+        """Verify that dates found on the page fall within the watch's date range.
+        Returns (is_in_range: bool, detail: str)."""
+        date_from_str = watch.get("date_from")
+        date_to_str = watch.get("date_to")
+
+        try:
+            date_from = datetime.strptime(date_from_str, "%Y-%m-%d") if date_from_str else None
+            date_to = datetime.strptime(date_to_str, "%Y-%m-%d") if date_to_str else None
+        except ValueError:
+            # If dates can't be parsed, don't filter — let it through
+            return True, "Date range check skipped (invalid date format)"
+
+        if not date_from and not date_to:
+            return True, "No date range set"
+
+        # Look for dates on the page in common formats
+        # Matches: 2026-04-15, 04/15/2026, April 15 2026, Apr 15, 2026, etc.
+        date_patterns = [
+            (r'(\d{4})-(\d{1,2})-(\d{1,2})', '%Y-%m-%d'),           # 2026-04-15
+            (r'(\d{1,2})/(\d{1,2})/(\d{4})', '%m/%d/%Y'),           # 04/15/2026
+            (r'(\d{1,2})/(\d{1,2})/(\d{2})\b', '%m/%d/%y'),         # 04/15/26
+        ]
+
+        # Also look for written-out month names
+        month_names = {
+            'january': 1, 'february': 2, 'march': 3, 'april': 4,
+            'may': 5, 'june': 6, 'july': 7, 'august': 8,
+            'september': 9, 'october': 10, 'november': 11, 'december': 12,
+            'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4,
+            'jun': 6, 'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+        }
+
+        found_dates = []
+
+        # Extract numeric format dates
+        for pattern, fmt in date_patterns:
+            for match in re.finditer(pattern, html):
+                try:
+                    d = datetime.strptime(match.group(0), fmt)
+                    found_dates.append(d)
+                except ValueError:
+                    continue
+
+        # Extract written month dates like "April 15, 2026" or "Apr 15 2026"
+        month_pattern = r'\b(' + '|'.join(month_names.keys()) + r')\s+(\d{1,2})(?:,?\s*(\d{4}))?\b'
+        for match in re.finditer(month_pattern, html.lower()):
+            try:
+                month = month_names[match.group(1)]
+                day = int(match.group(2))
+                year = int(match.group(3)) if match.group(3) else datetime.now().year
+                found_dates.append(datetime(year, month, day))
+            except (ValueError, KeyError):
+                continue
+
+        if not found_dates:
+            # No dates found on page — can't verify, let the availability through
+            # but note it in the details
+            return True, "Availability found (no dates detected on page to verify range)"
+
+        # Check if any found date falls within the desired range
+        dates_in_range = []
+        dates_out_of_range = []
+        for d in found_dates:
+            in_range = True
+            if date_from and d < date_from:
+                in_range = False
+            if date_to and d > date_to + timedelta(days=1):  # Include the end date
+                in_range = False
+            if in_range:
+                dates_in_range.append(d.strftime('%Y-%m-%d'))
+            else:
+                dates_out_of_range.append(d.strftime('%Y-%m-%d'))
+
+        if dates_in_range:
+            unique_dates = sorted(set(dates_in_range))[:5]
+            return True, f"Availability found for dates in range: {', '.join(unique_dates)}"
+        else:
+            unique_out = sorted(set(dates_out_of_range))[:5]
+            range_str = f"{date_from_str or '...'} to {date_to_str or '...'}"
+            return False, f"Availability found but outside your date range ({range_str}). Dates on page: {', '.join(unique_out)}"
+
     def _send_notification(self, watch, message):
         """Send email notification."""
         if not SMTP_USER or not SMTP_PASS:
@@ -283,30 +374,64 @@ class MonitorEngine:
 
         try:
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = f"🔔 ReservationAlert: {watch['name']} is available!"
+            msg["Subject"] = f"🔔 {watch['name']} — Reservation Available!"
             msg["From"] = FROM_EMAIL
             msg["To"] = watch["user_email"]
 
+            # Build detail lines
+            detail_lines_html = ""
+            detail_lines_text = ""
+            date_from = watch.get("date_from") or watch.get("target_date")
+            date_to = watch.get("date_to")
+            if date_from:
+                date_display = f"{date_from} → {date_to}" if date_to and date_to != date_from else date_from
+                detail_lines_html += f'<div style="margin:6px 0;font-size:16px;">📅 {date_display}</div>'
+                detail_lines_text += f"Date: {date_display}\n"
+            if watch.get("target_time"):
+                detail_lines_html += f'<div style="margin:6px 0;font-size:16px;">⏰ {watch["target_time"]}</div>'
+                detail_lines_text += f"Time: {watch['target_time']}\n"
+            if watch.get("party_size"):
+                detail_lines_html += f'<div style="margin:6px 0;font-size:16px;">👥 Party of {watch["party_size"]}</div>'
+                detail_lines_text += f"Party size: {watch['party_size']}\n"
+
+            plain_body = f"""Great news! {watch['name']} has reservation availability:
+
+{detail_lines_text}
+{message}
+
+🔗 {watch['url']}
+
+Book fast — these go quickly!
+"""
+
             html_body = f"""
             <html>
-            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center;">
-                    <h1 style="margin: 0;">🎉 Reservation Found!</h1>
-                </div>
-                <div style="padding: 24px; background: #f8f9fa; border-radius: 0 0 12px 12px;">
-                    <h2 style="color: #333;">{watch['name']}</h2>
-                    <p style="color: #666; font-size: 16px;">{message}</p>
-                    <a href="{watch['url']}" style="display: inline-block; background: #667eea; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 16px;">
-                        Book Now →
-                    </a>
-                    <p style="color: #999; font-size: 12px; margin-top: 24px;">
-                        This alert was sent by ReservationAlert.ai
-                    </p>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f4f4f4;">
+                <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; color: white; text-align: center;">
+                        <h1 style="margin: 0; font-size: 24px;">🎉 Reservation Available!</h1>
+                        <p style="margin: 8px 0 0; opacity: 0.9; font-size: 16px;">{watch['name']}</p>
+                    </div>
+                    <div style="padding: 24px;">
+                        <p style="color: #333; font-size: 16px; margin-top: 0;">Great news! We found availability:</p>
+                        <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin: 16px 0;">
+                            {detail_lines_html}
+                            <div style="margin:8px 0 0; font-size:14px; color:#666;">🔗 <a href="{watch['url']}" style="color: #667eea;">{watch['url'][:80]}{'...' if len(watch['url']) > 80 else ''}</a></div>
+                        </div>
+                        <p style="color: #666; font-size: 14px;">{message}</p>
+                        <a href="{watch['url']}" style="display: inline-block; background: #667eea; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 8px; font-size: 16px;">
+                            Book Now →
+                        </a>
+                        <p style="color: #999; font-size: 13px; margin-top: 20px;">Book fast — these go quickly!</p>
+                    </div>
+                    <div style="padding: 16px 24px; background: #f8f9fa; border-top: 1px solid #eee; text-align: center;">
+                        <p style="color: #aaa; font-size: 12px; margin: 0;">Sent by <a href="https://reservationalert.ai" style="color: #667eea;">ReservationAlert.ai</a></p>
+                    </div>
                 </div>
             </body>
             </html>
             """
-            msg.attach(MIMEText(message, "plain"))
+            msg.attach(MIMEText(plain_body, "plain"))
             msg.attach(MIMEText(html_body, "html"))
 
             with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
@@ -401,9 +526,9 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         watch_id = str(uuid.uuid4())
         conn = get_db()
         conn.execute("""
-            INSERT INTO watches (id, user_email, watch_type, name, url, target_date, target_time,
-                                 party_size, check_pattern, notify_via, phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO watches (id, user_email, watch_type, name, url, target_date, date_from, date_to,
+                                 target_time, party_size, check_pattern, notify_via, phone)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             watch_id,
             data.get("user_email", ""),
@@ -411,6 +536,8 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             data.get("name", "Untitled Watch"),
             data.get("url", ""),
             data.get("target_date"),
+            data.get("date_from") or data.get("target_date"),
+            data.get("date_to") or data.get("target_date"),
             data.get("target_time"),
             data.get("party_size", 2),
             data.get("check_pattern"),
@@ -438,8 +565,8 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
 
         fields = []
         values = []
-        for key in ["user_email", "watch_type", "name", "url", "target_date", "target_time",
-                     "party_size", "check_pattern", "notify_via", "phone", "status", "last_result_detail"]:
+        for key in ["user_email", "watch_type", "name", "url", "target_date", "date_from", "date_to",
+                     "target_time", "party_size", "check_pattern", "notify_via", "phone", "status", "last_result_detail"]:
             if key in data:
                 fields.append(f"{key} = ?")
                 values.append(data[key])
