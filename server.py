@@ -53,6 +53,7 @@ def init_db():
             date_to TEXT,                     -- end of desired date range (YYYY-MM-DD)
             target_time TEXT,                 -- desired time for restaurants
             party_size INTEGER DEFAULT 2,
+            site_numbers TEXT,                -- comma-separated campsite numbers to watch
             check_pattern TEXT,               -- CSS selector or text pattern to look for
             notify_via TEXT DEFAULT 'email',  -- 'email' | 'sms' | 'both'
             phone TEXT,
@@ -257,7 +258,31 @@ class MonitorEngine:
         """Check campground/park reservation availability."""
         html_lower = html.lower()
 
-        # Look for available site indicators
+        # If specific site numbers are requested, check for those first
+        site_numbers = watch.get("site_numbers")
+        if site_numbers:
+            sites = [s.strip() for s in site_numbers.split(",") if s.strip()]
+            found_sites = []
+            for site in sites:
+                # Look for the site number near availability indicators
+                # Common patterns: "Site 42 Available", "Site #42", "#42 - Available", "042"
+                site_patterns = [
+                    rf'(?:site|campsite|space|spot)\s*#?\s*0*{re.escape(site)}\b[^<]{{0,100}}(?:available|open|book|reserve)',
+                    rf'(?:available|open|book|reserve)[^<]{{0,100}}(?:site|campsite|space|spot)\s*#?\s*0*{re.escape(site)}\b',
+                    rf'#\s*0*{re.escape(site)}\b[^<]{{0,100}}(?:available|open|book|reserve)',
+                    rf'\b0*{re.escape(site)}\b[^<]{{0,200}}(?:available|open|book\s+now|reserve)',
+                ]
+                for sp in site_patterns:
+                    if re.search(sp, html_lower):
+                        found_sites.append(site)
+                        break
+
+            if found_sites:
+                return True, f"Site(s) {', '.join(found_sites)} appear available!"
+            # If specific sites requested but none found available, still check general availability
+            # but report that the specific sites weren't found
+
+        # General availability check
         positive_patterns = [
             r"available",
             r"book\s+now",
@@ -279,12 +304,18 @@ class MonitorEngine:
 
         for neg in negative_patterns:
             if re.search(neg, html_lower):
+                if site_numbers:
+                    return False, f"Site(s) {site_numbers} not found available — page shows fully reserved"
                 return False, "Site indicates fully reserved"
 
         for pattern in positive_patterns:
             if re.search(pattern, html_lower):
+                if site_numbers:
+                    return True, f"General availability found (specific sites {site_numbers} not confirmed — check manually)"
                 return True, f"Availability indicator found (pattern: {pattern})"
 
+        if site_numbers:
+            return False, f"Site(s) {site_numbers} not found available"
         return False, "No availability indicators found"
 
     def _check_custom(self, html, watch):
@@ -718,8 +749,8 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         conn = get_db()
         conn.execute("""
             INSERT INTO watches (id, user_email, watch_type, name, url, target_date, date_from, date_to,
-                                 target_time, party_size, check_pattern, notify_via, phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 target_time, party_size, site_numbers, check_pattern, notify_via, phone)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             watch_id,
             email,  # Use authenticated email, not form data
@@ -731,6 +762,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             data.get("date_to") or data.get("target_date"),
             data.get("target_time"),
             data.get("party_size", 2),
+            data.get("site_numbers"),
             data.get("check_pattern"),
             data.get("notify_via", "email"),
             data.get("phone"),
@@ -760,7 +792,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         fields = []
         values = []
         for key in ["user_email", "watch_type", "name", "url", "target_date", "date_from", "date_to",
-                     "target_time", "party_size", "check_pattern", "notify_via", "phone", "status", "last_result_detail"]:
+                     "target_time", "party_size", "site_numbers", "check_pattern", "notify_via", "phone", "status", "last_result_detail"]:
             if key in data:
                 fields.append(f"{key} = ?")
                 values.append(data[key])

@@ -349,7 +349,7 @@
 <header>
     <div class="header-inner">
         <a href="/" class="logo">
-            <div class="logo-icon">🔔</div>
+            <img src="/logo.png" alt="ReservationAlert.ai" style="width:36px; height:36px; border-radius:10px;">
             ReservationAlert<span style="color:var(--primary-light)">.ai</span>
         </a>
         <div class="header-actions" id="header-nav" style="display:none;">
@@ -367,7 +367,7 @@
 <!-- ── Login Screen ────────────────────── -->
 <div id="login-screen" class="container" style="display:flex; justify-content:center; align-items:center; min-height:calc(100vh - 64px);">
     <div class="card" style="max-width:420px; width:100%; text-align:center;">
-        <div style="font-size:48px; margin-bottom:12px;">🔔</div>
+        <img src="/logo.png" alt="ReservationAlert.ai" style="width:80px; height:80px; border-radius:16px; margin-bottom:12px;">
         <h2 style="margin-bottom:8px;">Welcome to ReservationAlert.ai</h2>
         <p style="color:var(--text-dim); margin-bottom:24px;">Enter your email to sign in or create an account. We'll send you a magic link — no password needed.</p>
         <div id="login-form">
@@ -510,6 +510,12 @@
             <label class="form-label">Reservation Page URL</label>
             <input type="url" class="form-input" id="watch-url" placeholder="https://resy.com/cities/sf/restaurant-name">
             <div class="form-hint">Paste the direct link to the reservation or availability page</div>
+        </div>
+
+        <div class="form-group" id="site-numbers-group" style="display:none;">
+            <label class="form-label">Campsite Numbers</label>
+            <input type="text" class="form-input" id="watch-site-numbers" placeholder="e.g. 42, 57, 103">
+            <div class="form-hint">Comma-separated site numbers you want. Leave blank to watch for any availability.</div>
         </div>
 
         <div class="form-row">
@@ -740,6 +746,7 @@ function renderWatches() {
                     ${w.date_from && w.date_to ? `<span>📅 ${w.date_from} → ${w.date_to}</span>` : w.date_from ? `<span>📅 From ${w.date_from}</span>` : w.date_to ? `<span>📅 Until ${w.date_to}</span>` : w.target_date ? `<span>📅 ${w.target_date}</span>` : ''}
                     ${w.target_time ? `<span>🕐 ${w.target_time}</span>` : ''}
                     ${w.party_size ? `<span>👥 ${w.party_size}</span>` : ''}
+                    ${w.site_numbers ? `<span>🏕️ Sites: ${esc(w.site_numbers)}</span>` : ''}
                     <span>📧 ${esc(w.user_email)}</span>
                     ${w.last_checked_at ? `<span>Last checked: ${timeAgo(w.last_checked_at)}</span>` : ''}
                 </div>
@@ -837,6 +844,7 @@ async function submitWatch() {
         date_to: document.getElementById('watch-date-to').value,
         target_time: document.getElementById('watch-time').value,
         party_size: parseInt(document.getElementById('watch-party').value),
+        site_numbers: document.getElementById('watch-site-numbers').value || null,
         notify_via: document.getElementById('watch-notify').value,
         phone: document.getElementById('watch-phone').value,
         check_pattern: document.getElementById('watch-pattern').value || null,
@@ -867,7 +875,9 @@ function editWatch(id) {
     document.getElementById('watch-date-to').value = w.date_to || w.target_date || '';
     document.getElementById('watch-time').value = w.target_time || '19:00';
     document.getElementById('watch-party').value = w.party_size || 2;
+    document.getElementById('watch-site-numbers').value = w.site_numbers || '';
     document.getElementById('watch-notify').value = w.notify_via || 'email';
+    document.getElementById('site-numbers-group').style.display = (w.watch_type === 'campground') ? '' : 'none';
     document.getElementById('watch-phone').value = w.phone || '';
     document.getElementById('watch-pattern').value = w.check_pattern || '';
 
@@ -923,10 +933,11 @@ function selectType(el) {
     // Show/hide relevant fields
     document.getElementById('time-group').style.display = selectedType === 'campground' ? 'none' : '';
     document.getElementById('party-group').style.display = selectedType === 'custom' ? 'none' : '';
+    document.getElementById('site-numbers-group').style.display = selectedType === 'campground' ? '' : 'none';
 }
 
 function clearForm() {
-    ['watch-name', 'watch-url', 'watch-date-from', 'watch-date-to', 'watch-phone', 'watch-pattern'].forEach(id => {
+    ['watch-name', 'watch-url', 'watch-date-from', 'watch-date-to', 'watch-site-numbers', 'watch-phone', 'watch-pattern'].forEach(id => {
         document.getElementById(id).value = '';
     });
     document.getElementById('watch-time').value = '19:00';
