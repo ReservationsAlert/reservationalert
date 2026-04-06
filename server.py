@@ -55,6 +55,7 @@ def init_db():
             status TEXT DEFAULT 'active',     -- 'active' | 'paused' | 'found' | 'expired'
             last_checked_at TEXT,
             last_result TEXT,                 -- 'available' | 'unavailable' | 'error'
+            last_result_detail TEXT,          -- human-readable detail of last check
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now'))
         )
@@ -173,8 +174,8 @@ class MonitorEngine:
             (watch["id"], result, details, elapsed_ms)
         )
         conn.execute(
-            "UPDATE watches SET last_checked_at = datetime('now'), last_result = ?, updated_at = datetime('now') WHERE id = ?",
-            (result, watch["id"])
+            "UPDATE watches SET last_checked_at = datetime('now'), last_result = ?, last_result_detail = ?, updated_at = datetime('now') WHERE id = ?",
+            (result, details, watch["id"])
         )
         conn.commit()
 
@@ -438,7 +439,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         fields = []
         values = []
         for key in ["user_email", "watch_type", "name", "url", "target_date", "target_time",
-                     "party_size", "check_pattern", "notify_via", "phone", "status"]:
+                     "party_size", "check_pattern", "notify_via", "phone", "status", "last_result_detail"]:
             if key in data:
                 fields.append(f"{key} = ?")
                 values.append(data[key])

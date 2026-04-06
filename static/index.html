@@ -310,6 +310,35 @@
             .watch-actions { width: 100%; justify-content: flex-end; }
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
+        /* ── Watch Result Banners ───────────────── */
+        .watch-found-banner, .watch-error-banner, .watch-status-banner {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 4px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .watch-found-banner {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .found-info { display: flex; flex-direction: column; gap: 4px; }
+        .found-label { font-weight: 600; color: var(--success); font-size: 14px; }
+        .found-detail { color: var(--text-dim); }
+        .watch-error-banner {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--danger);
+        }
+        .watch-status-banner {
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            color: var(--text-dim);
+        }
         /* ── Section visibility ─────────────────── */
         .section { display: none; }
         .section.active { display: block; }
@@ -569,7 +598,7 @@ function renderWatches() {
         return;
     }
     container.innerHTML = watches.map(w => `
-        <div class="watch-item">
+        <div class="watch-item" style="flex-wrap:wrap;">
             <div class="watch-icon ${w.watch_type}">
                 ${w.watch_type === 'restaurant' ? '🍽️' : w.watch_type === 'campground' ? '🏕️' : '🌐'}
             </div>
@@ -595,6 +624,22 @@ function renderWatches() {
                 </button>
                 <button class="btn-icon" title="Delete" onclick="deleteWatch('${w.id}')">🗑</button>
             </div>
+            ${w.status === 'found' || w.last_result === 'available' ? `
+            <div class="watch-found-banner">
+                <div class="found-info">
+                    <span class="found-label">🎉 Availability Found!</span>
+                    <span class="found-detail">${esc(w.last_result_detail || 'A match was detected on the page')}</span>
+                </div>
+                <a href="${esc(w.url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Book Now →</a>
+            </div>` : ''}
+            ${w.last_result === 'error' ? `
+            <div class="watch-error-banner">
+                <span>⚠️ Last check encountered an error${w.last_result_detail ? ': ' + esc(w.last_result_detail) : ''}</span>
+            </div>` : ''}
+            ${w.last_result === 'unavailable' && w.status === 'active' ? `
+            <div class="watch-status-banner">
+                <span>🔍 Monitoring — no availability yet. Checking every 5 minutes.</span>
+            </div>` : ''}
         </div>
     `).join('');
 }
@@ -610,15 +655,18 @@ function renderAlerts() {
             </div>`;
         return;
     }
-    container.innerHTML = alerts.map(a => `
+    container.innerHTML = alerts.map(a => {
+        const watch = watches.find(w => w.id === a.watch_id);
+        return `
         <div class="alert-item">
             <div class="alert-dot"></div>
-            <div>
+            <div style="flex:1;">
                 <div class="alert-text">${esc(a.message)}</div>
                 <div class="alert-time">${a.watch_name ? esc(a.watch_name) + ' · ' : ''}${timeAgo(a.sent_at)}</div>
             </div>
-        </div>
-    `).join('');
+            ${watch ? `<a href="${esc(watch.url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Book Now →</a>` : ''}
+        </div>`;
+    }).join('');
 }
 
 function renderRecentActivity() {
@@ -632,15 +680,18 @@ function renderRecentActivity() {
             </div>`;
         return;
     }
-    container.innerHTML = alerts.slice(0, 10).map(a => `
+    container.innerHTML = alerts.slice(0, 10).map(a => {
+        const watch = watches.find(w => w.id === a.watch_id);
+        return `
         <div class="alert-item">
             <div class="alert-dot"></div>
-            <div>
+            <div style="flex:1;">
                 <div class="alert-text">${esc(a.message)}</div>
                 <div class="alert-time">${a.watch_name ? esc(a.watch_name) + ' · ' : ''}${timeAgo(a.sent_at)}</div>
             </div>
-        </div>
-    `).join('');
+            ${watch ? `<a href="${esc(watch.url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Book Now →</a>` : ''}
+        </div>`;
+    }).join('');
 }
 
 // ── Actions ────────────────────────────────
