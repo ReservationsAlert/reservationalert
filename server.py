@@ -11,13 +11,10 @@ import os
 import uuid
 import threading
 import time
-import smtplib
 import urllib.request
 import urllib.error
 import re
 from datetime import datetime, timedelta
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 from functools import partial
 
@@ -27,12 +24,9 @@ PORT = int(os.environ.get("PORT", 8080))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "reservationalert.db"))
 CHECK_INTERVAL_SECONDS = int(os.environ.get("CHECK_INTERVAL", 300))  # 5 minutes default
 
-# Email config (set via environment variables)
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASS = os.environ.get("SMTP_PASS", "")
-FROM_EMAIL = os.environ.get("FROM_EMAIL", "alerts@reservationalert.ai")
+# Email config via Resend (set RESEND_API_KEY env var)
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+FROM_EMAIL = os.environ.get("FROM_EMAIL", "ReservationAlert <onboarding@resend.dev>")
 
 # ── Database Setup ───────────────────────────────────────────────────────────
 
@@ -367,42 +361,23 @@ class MonitorEngine:
             return False, f"Availability found but outside your date range ({range_str}). Dates on page: {', '.join(unique_out)}"
 
     def _send_notification(self, watch, message):
-        """Send email notification."""
-        if not SMTP_USER or not SMTP_PASS:
-            print(f"[Notify] Email not configured — would send to {watch['user_email']}: {message}")
+        """Send email notification via Resend API."""
+        if not RESEND_API_KEY:
+            print(f"[Notify] Email not configured (no RESEND_API_KEY) — would send to {watch['user_email']}: {message}")
             return
 
         try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = f"🔔 {watch['name']} — Reservation Available!"
-            msg["From"] = FROM_EMAIL
-            msg["To"] = watch["user_email"]
-
             # Build detail lines
             detail_lines_html = ""
-            detail_lines_text = ""
             date_from = watch.get("date_from") or watch.get("target_date")
             date_to = watch.get("date_to")
             if date_from:
                 date_display = f"{date_from} → {date_to}" if date_to and date_to != date_from else date_from
                 detail_lines_html += f'<div style="margin:6px 0;font-size:16px;">📅 {date_display}</div>'
-                detail_lines_text += f"Date: {date_display}\n"
             if watch.get("target_time"):
                 detail_lines_html += f'<div style="margin:6px 0;font-size:16px;">⏰ {watch["target_time"]}</div>'
-                detail_lines_text += f"Time: {watch['target_time']}\n"
             if watch.get("party_size"):
                 detail_lines_html += f'<div style="margin:6px 0;font-size:16px;">👥 Party of {watch["party_size"]}</div>'
-                detail_lines_text += f"Party size: {watch['party_size']}\n"
-
-            plain_body = f"""Great news! {watch['name']} has reservation availability:
-
-{detail_lines_text}
-{message}
-
-🔗 {watch['url']}
-
-Book fast — these go quickly!
-"""
 
             html_body = f"""
             <html>
@@ -431,15 +406,28 @@ Book fast — these go quickly!
             </body>
             </html>
             """
-            msg.attach(MIMEText(plain_body, "plain"))
-            msg.attach(MIMEText(html_body, "html"))
 
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-                server.starttls()
-                server.login(SMTP_USER, SMTP_PASS)
-                server.sendmail(FROM_EMAIL, watch["user_email"], msg.as_string())
+            payload = json.dumps({
+                "from": FROM_EMAIL,
+                "to": [watch["user_email"]],
+                "subject": f"🔔 {watch['name']} — Reservation Available!",
+                "html": html_body,
+            }).encode("utf-8")
 
-            print(f"[Notify] Email sent to {watch['user_email']}")
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+
+            with urllib.request.urlopen(req) as resp:
+                result = json.loads(resp.read().decode())
+                print(f"[Notify] Email sent to {watch['user_email']} — id: {result.get('id')}")
+
         except Exception as e:
             print(f"[Notify] Failed to send email: {e}")
 
