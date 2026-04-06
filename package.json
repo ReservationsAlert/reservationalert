@@ -1,0 +1,20 @@
+{
+  "name": "reservationalert",
+  "version": "1.0.0",
+  "description": "ReservationAlert.ai - Monitor reservations and get notified when spots open up",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.4.3",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.8",
+    "axios": "^1.6.5",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.0"
+  }
+}
