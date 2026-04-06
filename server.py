@@ -5,7 +5,10 @@ Zero-dependency Python server (uses only standard library)
 """
 
 import http.server
+import hashlib
+import hmac
 import json
+import secrets
 import sqlite3
 import os
 import uuid
@@ -27,6 +30,11 @@ CHECK_INTERVAL_SECONDS = int(os.environ.get("CHECK_INTERVAL", 300))  # 5 minutes
 # Email config via Resend (set RESEND_API_KEY env var)
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "ReservationAlert <onboarding@resend.dev>")
+BASE_URL = os.environ.get("BASE_URL", "https://reservationalert.onrender.com")
+
+# Auth config
+SESSION_EXPIRY_DAYS = 30
+MAGIC_LINK_EXPIRY_MINUTES = 15
 
 # ── Database Setup ───────────────────────────────────────────────────────────
 
@@ -64,6 +72,16 @@ def init_db():
             alert_type TEXT DEFAULT 'availability',
             sent_at TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (watch_id) REFERENCES watches(id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS auth_tokens (
+            token TEXT PRIMARY KEY,
+            email TEXT NOT NULL,
+            token_type TEXT NOT NULL,        -- 'magic_link' | 'session'
+            expires_at TEXT NOT NULL,
+            used INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
         )
     """)
     conn.execute("""
@@ -440,9 +458,96 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         self.monitor = monitor
         super().__init__(*args, directory=os.path.join(os.path.dirname(__file__), "static"), **kwargs)
 
+    # ── Auth helpers ───────────────────────────────────────────────────────
+
+    def _get_auth_email(self):
+        """Validate session token from Authorization header and return user email."""
+        auth = self.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return None
+        token = auth[7:]
+        conn = get_db()
+        row = conn.execute(
+            "SELECT email, expires_at FROM auth_tokens WHERE token = ? AND token_type = 'session' AND used = 0",
+            (token,)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        if datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S") < datetime.utcnow():
+            return None
+        return row["email"]
+
+    def _require_auth(self):
+        """Return user email or send 401 and return None."""
+        email = self._get_auth_email()
+        if not email:
+            self._json_response({"error": "Unauthorized — please log in"}, 401)
+        return email
+
+    def _send_magic_link_email(self, email, token):
+        """Send the magic link login email via Resend."""
+        link = f"{BASE_URL}/?token={token}"
+
+        if not RESEND_API_KEY:
+            print(f"[Auth] Magic link for {email}: {link}")
+            return True
+
+        try:
+            html_body = f"""
+            <html>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+                <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; color: white; text-align: center;">
+                        <h1 style="margin: 0; font-size: 22px;">🔔 ReservationAlert.ai</h1>
+                    </div>
+                    <div style="padding: 24px; text-align: center;">
+                        <p style="color: #333; font-size: 16px;">Click the button below to sign in:</p>
+                        <a href="{link}" style="display: inline-block; background: #667eea; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0; font-size: 16px;">
+                            Sign In →
+                        </a>
+                        <p style="color: #999; font-size: 13px; margin-top: 16px;">This link expires in {MAGIC_LINK_EXPIRY_MINUTES} minutes.</p>
+                        <p style="color: #ccc; font-size: 11px; margin-top: 12px;">If you didn't request this, just ignore this email.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+            payload = json.dumps({
+                "from": FROM_EMAIL,
+                "to": [email],
+                "subject": "🔔 Sign in to ReservationAlert.ai",
+                "html": html_body,
+            }).encode("utf-8")
+
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req) as resp:
+                result = json.loads(resp.read().decode())
+                print(f"[Auth] Magic link email sent to {email} — id: {result.get('id')}")
+            return True
+        except Exception as e:
+            print(f"[Auth] Failed to send magic link email: {e}")
+            return False
+
+    # ── Routes ──────────────────────────────────────────────────────────
+
     def do_GET(self):
+        # Public routes (no auth needed)
         if self.path == "/api/health":
             self._json_response({"status": "ok", "version": "1.0.0"})
+        elif self.path.startswith("/api/auth/verify"):
+            self._verify_magic_link()
+        elif self.path == "/api/auth/me":
+            self._auth_me()
+        # Protected routes
         elif self.path == "/api/watches":
             self._get_watches()
         elif self.path.startswith("/api/watches/") and "/alerts" in self.path:
@@ -467,7 +572,9 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
-        if self.path == "/api/watches":
+        if self.path == "/api/auth/login":
+            self._auth_login()
+        elif self.path == "/api/watches":
             self._create_watch()
         elif self.path.startswith("/api/watches/") and "/check" in self.path:
             watch_id = self.path.split("/")[3]
@@ -489,17 +596,110 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self._json_response({"error": "Not found"}, 404)
 
+    # ── Auth Endpoints ──────────────────────────────────────────────────
+
+    def _auth_login(self):
+        """Send a magic link to the user's email."""
+        data = self._read_json()
+        if not data:
+            return
+        email = (data.get("email") or "").strip().lower()
+        if not email or "@" not in email:
+            self._json_response({"error": "Please enter a valid email address"}, 400)
+            return
+
+        # Create magic link token
+        token = secrets.token_urlsafe(32)
+        expires = (datetime.utcnow() + timedelta(minutes=MAGIC_LINK_EXPIRY_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO auth_tokens (token, email, token_type, expires_at) VALUES (?, ?, 'magic_link', ?)",
+            (token, email, expires)
+        )
+        conn.commit()
+        conn.close()
+
+        if self._send_magic_link_email(email, token):
+            self._json_response({"ok": True, "message": "Check your email for a sign-in link!"})
+        else:
+            self._json_response({"error": "Failed to send email. Please try again."}, 500)
+
+    def _verify_magic_link(self):
+        """Verify magic link token and return a session token."""
+        # Parse token from query string
+        from urllib.parse import urlparse, parse_qs
+        query = parse_qs(urlparse(self.path).query)
+        token = (query.get("token") or [None])[0]
+
+        if not token:
+            self._json_response({"error": "Missing token"}, 400)
+            return
+
+        conn = get_db()
+        row = conn.execute(
+            "SELECT email, expires_at, used FROM auth_tokens WHERE token = ? AND token_type = 'magic_link'",
+            (token,)
+        ).fetchone()
+
+        if not row:
+            conn.close()
+            self._json_response({"error": "Invalid or expired link"}, 401)
+            return
+
+        if row["used"]:
+            conn.close()
+            self._json_response({"error": "This link has already been used. Please request a new one."}, 401)
+            return
+
+        if datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S") < datetime.utcnow():
+            conn.close()
+            self._json_response({"error": "This link has expired. Please request a new one."}, 401)
+            return
+
+        # Mark magic link as used
+        conn.execute("UPDATE auth_tokens SET used = 1 WHERE token = ?", (token,))
+
+        # Create session token
+        session_token = secrets.token_urlsafe(48)
+        session_expires = (datetime.utcnow() + timedelta(days=SESSION_EXPIRY_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute(
+            "INSERT INTO auth_tokens (token, email, token_type, expires_at) VALUES (?, ?, 'session', ?)",
+            (session_token, row["email"], session_expires)
+        )
+        conn.commit()
+        conn.close()
+
+        self._json_response({
+            "ok": True,
+            "session_token": session_token,
+            "email": row["email"],
+        })
+
+    def _auth_me(self):
+        """Return current user info if authenticated."""
+        email = self._get_auth_email()
+        if email:
+            self._json_response({"email": email})
+        else:
+            self._json_response({"error": "Not authenticated"}, 401)
+
     # ── API Endpoints ────────────────────────────────────────────────────────
 
     def _get_watches(self):
+        email = self._require_auth()
+        if not email:
+            return
         conn = get_db()
-        watches = conn.execute("SELECT * FROM watches ORDER BY created_at DESC").fetchall()
+        watches = conn.execute("SELECT * FROM watches WHERE user_email = ? ORDER BY created_at DESC", (email,)).fetchall()
         conn.close()
         self._json_response([dict(w) for w in watches])
 
     def _get_watch(self, watch_id):
+        email = self._require_auth()
+        if not email:
+            return
         conn = get_db()
-        watch = conn.execute("SELECT * FROM watches WHERE id = ?", (watch_id,)).fetchone()
+        watch = conn.execute("SELECT * FROM watches WHERE id = ? AND user_email = ?", (watch_id, email)).fetchone()
         conn.close()
         if watch:
             self._json_response(dict(watch))
@@ -507,6 +707,9 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             self._json_response({"error": "Watch not found"}, 404)
 
     def _create_watch(self):
+        email = self._require_auth()
+        if not email:
+            return
         data = self._read_json()
         if not data:
             return
@@ -519,7 +722,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             watch_id,
-            data.get("user_email", ""),
+            email,  # Use authenticated email, not form data
             data.get("watch_type", "custom"),
             data.get("name", "Untitled Watch"),
             data.get("url", ""),
@@ -540,12 +743,15 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         self._json_response(dict(watch), 201)
 
     def _update_watch(self, watch_id):
+        email = self._require_auth()
+        if not email:
+            return
         data = self._read_json()
         if not data:
             return
 
         conn = get_db()
-        existing = conn.execute("SELECT * FROM watches WHERE id = ?", (watch_id,)).fetchone()
+        existing = conn.execute("SELECT * FROM watches WHERE id = ? AND user_email = ?", (watch_id, email)).fetchone()
         if not existing:
             conn.close()
             self._json_response({"error": "Watch not found"}, 404)
@@ -570,7 +776,16 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         self._json_response(dict(watch))
 
     def _delete_watch(self, watch_id):
+        email = self._require_auth()
+        if not email:
+            return
         conn = get_db()
+        # Verify ownership
+        existing = conn.execute("SELECT id FROM watches WHERE id = ? AND user_email = ?", (watch_id, email)).fetchone()
+        if not existing:
+            conn.close()
+            self._json_response({"error": "Watch not found"}, 404)
+            return
         conn.execute("DELETE FROM alerts WHERE watch_id = ?", (watch_id,))
         conn.execute("DELETE FROM check_log WHERE watch_id = ?", (watch_id,))
         conn.execute("DELETE FROM watches WHERE id = ?", (watch_id,))
@@ -579,8 +794,11 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         self._json_response({"deleted": True})
 
     def _trigger_check(self, watch_id):
+        email = self._require_auth()
+        if not email:
+            return
         conn = get_db()
-        watch = conn.execute("SELECT * FROM watches WHERE id = ?", (watch_id,)).fetchone()
+        watch = conn.execute("SELECT * FROM watches WHERE id = ? AND user_email = ?", (watch_id, email)).fetchone()
         conn.close()
         if not watch:
             self._json_response({"error": "Watch not found"}, 404)
@@ -605,9 +823,13 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         self._json_response([dict(a) for a in alerts])
 
     def _get_all_alerts(self):
+        email = self._require_auth()
+        if not email:
+            return
         conn = get_db()
         alerts = conn.execute(
-            "SELECT a.*, w.name as watch_name FROM alerts a JOIN watches w ON a.watch_id = w.id ORDER BY a.sent_at DESC LIMIT 100"
+            "SELECT a.*, w.name as watch_name FROM alerts a JOIN watches w ON a.watch_id = w.id WHERE w.user_email = ? ORDER BY a.sent_at DESC LIMIT 100",
+            (email,)
         ).fetchall()
         conn.close()
         self._json_response([dict(a) for a in alerts])
@@ -622,15 +844,19 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         self._json_response([dict(l) for l in logs])
 
     def _get_stats(self):
+        email = self._require_auth()
+        if not email:
+            return
         conn = get_db()
         stats = {
-            "total_watches": conn.execute("SELECT COUNT(*) FROM watches").fetchone()[0],
-            "active_watches": conn.execute("SELECT COUNT(*) FROM watches WHERE status='active'").fetchone()[0],
-            "found_watches": conn.execute("SELECT COUNT(*) FROM watches WHERE status='found'").fetchone()[0],
-            "total_alerts": conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0],
-            "total_checks": conn.execute("SELECT COUNT(*) FROM check_log").fetchone()[0],
+            "total_watches": conn.execute("SELECT COUNT(*) FROM watches WHERE user_email = ?", (email,)).fetchone()[0],
+            "active_watches": conn.execute("SELECT COUNT(*) FROM watches WHERE status='active' AND user_email = ?", (email,)).fetchone()[0],
+            "found_watches": conn.execute("SELECT COUNT(*) FROM watches WHERE status='found' AND user_email = ?", (email,)).fetchone()[0],
+            "total_alerts": conn.execute("SELECT COUNT(*) FROM alerts WHERE watch_id IN (SELECT id FROM watches WHERE user_email = ?)", (email,)).fetchone()[0],
+            "total_checks": conn.execute("SELECT COUNT(*) FROM check_log WHERE watch_id IN (SELECT id FROM watches WHERE user_email = ?)", (email,)).fetchone()[0],
             "checks_today": conn.execute(
-                "SELECT COUNT(*) FROM check_log WHERE checked_at >= date('now')"
+                "SELECT COUNT(*) FROM check_log WHERE checked_at >= date('now') AND watch_id IN (SELECT id FROM watches WHERE user_email = ?)",
+                (email,)
             ).fetchone()[0],
         }
         conn.close()
@@ -652,7 +878,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
         self.wfile.write(json.dumps(data, default=str).encode())
 
@@ -660,7 +886,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def log_message(self, format, *args):

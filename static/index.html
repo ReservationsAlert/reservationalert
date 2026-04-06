@@ -352,18 +352,39 @@
             <div class="logo-icon">🔔</div>
             ReservationAlert<span style="color:var(--primary-light)">.ai</span>
         </a>
-        <div class="header-actions">
+        <div class="header-actions" id="header-nav" style="display:none;">
             <div class="nav-tabs">
                 <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
                 <button class="nav-tab" data-tab="watches">My Watches</button>
                 <button class="nav-tab" data-tab="alerts">Alerts</button>
             </div>
             <button class="btn btn-primary" onclick="openModal()">+ New Watch</button>
+            <button class="btn btn-ghost btn-sm" id="user-btn" onclick="logout()" title="Sign out"></button>
         </div>
     </div>
 </header>
 
-<div class="container">
+<!-- ── Login Screen ────────────────────── -->
+<div id="login-screen" class="container" style="display:flex; justify-content:center; align-items:center; min-height:calc(100vh - 64px);">
+    <div class="card" style="max-width:420px; width:100%; text-align:center;">
+        <div style="font-size:48px; margin-bottom:12px;">🔔</div>
+        <h2 style="margin-bottom:8px;">Welcome to ReservationAlert.ai</h2>
+        <p style="color:var(--text-dim); margin-bottom:24px;">Enter your email to sign in or create an account. We'll send you a magic link — no password needed.</p>
+        <div id="login-form">
+            <input type="email" class="form-input" id="login-email" placeholder="you@example.com" style="margin-bottom:12px; text-align:center;">
+            <button class="btn btn-primary" onclick="sendMagicLink()" style="width:100%;" id="login-btn">Send Sign-In Link</button>
+        </div>
+        <div id="login-sent" style="display:none;">
+            <div style="font-size:32px; margin-bottom:12px;">📧</div>
+            <p style="color:var(--success); font-weight:600; margin-bottom:8px;">Check your email!</p>
+            <p style="color:var(--text-dim); font-size:14px;">We sent a sign-in link to <strong id="login-sent-email"></strong>. Click it to sign in.</p>
+            <button class="btn btn-ghost" onclick="resetLoginForm()" style="margin-top:16px;">Use a different email</button>
+        </div>
+        <div id="login-error" style="display:none; color:var(--danger); margin-top:12px; font-size:14px;"></div>
+    </div>
+</div>
+
+<div class="container" id="app-container" style="display:none;">
     <!-- ── Dashboard ────────────────────────── -->
     <div id="section-dashboard" class="section active">
         <div class="stats-grid">
@@ -528,11 +549,6 @@
             </div>
         </div>
 
-        <div class="form-group">
-            <label class="form-label">Your Email</label>
-            <input type="email" class="form-input" id="watch-email" placeholder="you@example.com">
-        </div>
-
         <div class="form-group" id="phone-group" style="display:none;">
             <label class="form-label">Phone Number (for SMS)</label>
             <input type="tel" class="form-input" id="watch-phone" placeholder="+1 555 123 4567">
@@ -557,28 +573,140 @@ let watches = [];
 let alerts = [];
 let stats = {};
 let selectedType = 'restaurant';
+let sessionToken = null;
+let userEmail = null;
 
 // ── API Helpers ────────────────────────────
 async function api(path, options = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
     const res = await fetch(`/api${path}`, {
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         ...options,
         body: options.body ? JSON.stringify(options.body) : undefined,
     });
-    return res.json();
+    const data = await res.json();
+    if (res.status === 401 && sessionToken) {
+        // Session expired
+        logout();
+        return null;
+    }
+    return data;
 }
+
+// ── Auth ───────────────────────────────────
+async function sendMagicLink() {
+    const email = document.getElementById('login-email').value.trim();
+    if (!email || !email.includes('@')) {
+        showLoginError('Please enter a valid email address.');
+        return;
+    }
+    const btn = document.getElementById('login-btn');
+    btn.textContent = 'Sending...';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('login-sent').style.display = 'block';
+            document.getElementById('login-sent-email').textContent = email;
+            document.getElementById('login-error').style.display = 'none';
+        } else {
+            showLoginError(data.error || 'Something went wrong.');
+        }
+    } catch (e) {
+        showLoginError('Network error. Please try again.');
+    }
+    btn.textContent = 'Send Sign-In Link';
+    btn.disabled = false;
+}
+
+function showLoginError(msg) {
+    const el = document.getElementById('login-error');
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+
+function resetLoginForm() {
+    document.getElementById('login-form').style.display = 'block';
+    document.getElementById('login-sent').style.display = 'none';
+    document.getElementById('login-error').style.display = 'none';
+    document.getElementById('login-email').value = '';
+}
+
+async function checkMagicLinkToken() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (!token) return false;
+
+    // Clean URL
+    window.history.replaceState({}, '', '/');
+
+    try {
+        const res = await fetch(`/api/auth/verify?token=${token}`);
+        const data = await res.json();
+        if (data.ok && data.session_token) {
+            sessionToken = data.session_token;
+            userEmail = data.email;
+            sessionStorage.setItem('session_token', sessionToken);
+            sessionStorage.setItem('user_email', userEmail);
+            showApp();
+            return true;
+        } else {
+            showLoginError(data.error || 'Invalid or expired link. Please request a new one.');
+            return false;
+        }
+    } catch (e) {
+        showLoginError('Network error verifying link.');
+        return false;
+    }
+}
+
+function showApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-container').style.display = 'block';
+    document.getElementById('header-nav').style.display = 'flex';
+    document.getElementById('user-btn').textContent = userEmail;
+    loadAll();
+}
+
+function logout() {
+    sessionToken = null;
+    userEmail = null;
+    sessionStorage.removeItem('session_token');
+    sessionStorage.removeItem('user_email');
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app-container').style.display = 'none';
+    document.getElementById('header-nav').style.display = 'none';
+    resetLoginForm();
+}
+
+// Allow Enter key on login email
+document.getElementById('login-email').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendMagicLink();
+});
 
 // ── Data Loading ───────────────────────────
 async function loadAll() {
-    [watches, stats, alerts] = await Promise.all([
+    const results = await Promise.all([
         api('/watches'),
         api('/stats'),
         api('/alerts'),
     ]);
-    renderStats();
-    renderWatches();
-    renderAlerts();
-    renderRecentActivity();
+    if (!results[0]) return; // auth failed
+    [watches, stats, alerts] = results;
+    if (Array.isArray(watches)) {
+        renderStats();
+        renderWatches();
+        renderAlerts();
+        renderRecentActivity();
+    }
 }
 
 // ── Rendering ──────────────────────────────
@@ -709,14 +837,13 @@ async function submitWatch() {
         date_to: document.getElementById('watch-date-to').value,
         target_time: document.getElementById('watch-time').value,
         party_size: parseInt(document.getElementById('watch-party').value),
-        user_email: document.getElementById('watch-email').value,
         notify_via: document.getElementById('watch-notify').value,
         phone: document.getElementById('watch-phone').value,
         check_pattern: document.getElementById('watch-pattern').value || null,
     };
 
-    if (!data.name || !data.url || !data.user_email) {
-        alert('Please fill in the name, URL, and email fields.');
+    if (!data.name || !data.url) {
+        alert('Please fill in the name and URL fields.');
         return;
     }
 
@@ -740,7 +867,6 @@ function editWatch(id) {
     document.getElementById('watch-date-to').value = w.date_to || w.target_date || '';
     document.getElementById('watch-time').value = w.target_time || '19:00';
     document.getElementById('watch-party').value = w.party_size || 2;
-    document.getElementById('watch-email').value = w.user_email || '';
     document.getElementById('watch-notify').value = w.notify_via || 'email';
     document.getElementById('watch-phone').value = w.phone || '';
     document.getElementById('watch-pattern').value = w.check_pattern || '';
@@ -800,7 +926,7 @@ function selectType(el) {
 }
 
 function clearForm() {
-    ['watch-name', 'watch-url', 'watch-date-from', 'watch-date-to', 'watch-email', 'watch-phone', 'watch-pattern'].forEach(id => {
+    ['watch-name', 'watch-url', 'watch-date-from', 'watch-date-to', 'watch-phone', 'watch-pattern'].forEach(id => {
         document.getElementById(id).value = '';
     });
     document.getElementById('watch-time').value = '19:00';
@@ -845,8 +971,37 @@ function timeAgo(dateStr) {
 }
 
 // ── Init ───────────────────────────────────
-loadAll();
-setInterval(loadAll, 30000); // Refresh every 30 seconds
+(async function init() {
+    // Check for magic link token in URL
+    const handled = await checkMagicLinkToken();
+    if (handled) {
+        setInterval(loadAll, 30000);
+        return;
+    }
+
+    // Check for existing session
+    const savedToken = sessionStorage.getItem('session_token');
+    const savedEmail = sessionStorage.getItem('user_email');
+    if (savedToken && savedEmail) {
+        sessionToken = savedToken;
+        userEmail = savedEmail;
+        // Verify session is still valid
+        const me = await api('/auth/me');
+        if (me && me.email) {
+            userEmail = me.email;
+            showApp();
+            setInterval(loadAll, 30000);
+            return;
+        }
+        // Session expired
+        sessionStorage.removeItem('session_token');
+        sessionStorage.removeItem('user_email');
+        sessionToken = null;
+        userEmail = null;
+    }
+
+    // Show login screen (it's shown by default)
+})();
 </script>
 
 </body>
