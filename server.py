@@ -29,7 +29,7 @@ CHECK_INTERVAL_SECONDS = int(os.environ.get("CHECK_INTERVAL", 300))  # 5 minutes
 
 # Email config via Resend (set RESEND_API_KEY env var)
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-FROM_EMAIL = os.environ.get("FROM_EMAIL", "ReservationAlert <onboarding@resend.dev>")
+FROM_EMAIL = os.environ.get("FROM_EMAIL", "ReservationAlert <noreply@reservationalert.ai>")
 BASE_URL = os.environ.get("BASE_URL", "https://reservationalert.onrender.com")
 
 # Auth config
