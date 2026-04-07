@@ -469,6 +469,7 @@ class MonitorEngine:
                 headers={
                     "Authorization": f"Bearer {RESEND_API_KEY}",
                     "Content-Type": "application/json",
+                    "User-Agent": "ReservationAlert/1.0",
                 },
                 method="POST",
             )
@@ -557,6 +558,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 headers={
                     "Authorization": f"Bearer {RESEND_API_KEY}",
                     "Content-Type": "application/json",
+                    "User-Agent": "ReservationAlert/1.0",
                 },
                 method="POST",
             )
