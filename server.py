@@ -564,6 +564,11 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
                 result = json.loads(resp.read().decode())
                 print(f"[Auth] Magic link email sent to {email} — id: {result.get('id')}")
             return True
+        except urllib.error.HTTPError as he:
+            body = he.read().decode("utf-8", errors="replace")
+            print(f"[Auth] Failed to send magic link email: {he} — Response body: {body}")
+            print(f"[Auth] API key starts with: {RESEND_API_KEY[:12]}... (len={len(RESEND_API_KEY)})")
+            return False
         except Exception as e:
             print(f"[Auth] Failed to send magic link email: {e}")
             return False
