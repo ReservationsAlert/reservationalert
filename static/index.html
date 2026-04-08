@@ -801,6 +801,7 @@ function renderAlerts() {
             <div class="alert-dot"></div>
             <div style="flex:1;">
                 <div class="alert-text">${esc(a.message)}</div>
+                ${a.target_date || a.target_time || a.party_size ? `<div style="margin:4px 0;font-size:13px;color:#667eea;">${a.target_date ? '📅 ' + esc(a.target_date) + ' ' : ''}${a.target_time ? '⏰ ' + esc(a.target_time) + ' ' : ''}${a.party_size ? '👥 Party of ' + esc(String(a.party_size)) : ''}</div>` : ''}
                 <div class="alert-time">${a.watch_name ? esc(a.watch_name) + ' · ' : ''}${timeAgo(a.sent_at)}</div>
             </div>
             ${watch ? `<a href="${esc(watch.url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Book Now →</a>` : ''}
