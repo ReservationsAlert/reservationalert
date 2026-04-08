@@ -416,18 +416,42 @@ class MonitorEngine:
             return
 
         try:
-            # Build detail lines
-            detail_lines_html = ""
-            date_from = watch.get("date_from") or watch.get("target_date")
-            date_to = watch.get("date_to")
-            if date_from:
-                date_display = f"{date_from} → {date_to}" if date_to and date_to != date_from else date_from
-                detail_lines_html += f'<div style="margin:6px 0;font-size:16px;">📅 {date_display}</div>'
-            if watch.get("target_time"):
-                detail_lines_html += f'<div style="margin:6px 0;font-size:16px;">⏰ {watch["target_time"]}</div>'
-            if watch.get("party_size"):
-                detail_lines_html += f'<div style="margin:6px 0;font-size:16px;">👥 Party of {watch["party_size"]}</div>'
+            # Build detail lines - ALWAYS show booking details prominently
+            date_from = watch.get("date_from") or watch.get("target_date") or ""
+            date_to = watch.get("date_to") or ""
+            target_time = watch.get("target_time") or ""
+            party_size = watch.get("party_size") or 2
 
+            # Format date display
+            if date_from:
+                date_display = f'{date_from} to {date_to}' if date_to and date_to != date_from else date_from
+            else:
+                date_display = "Not specified"
+
+            time_display = target_time if target_time else "Not specified"
+
+            detail_lines_html = f"""
+            <div style="background:#f0f4ff;border-radius:12px;padding:20px;margin:16px 0;border-left:4px solid #667eea;">
+              <div style="font-weight:bold;font-size:18px;color:#333;margin-bottom:12px;">Your Booking Details:</div>
+              <table style="width:100%;border-collapse:collapse;">
+                <tr>
+                  <td style="padding:8px 0;font-size:16px;color:#555;width:40px;">📅</td>
+                  <td style="padding:8px 0;font-size:16px;font-weight:bold;color:#333;">Date</td>
+                  <td style="padding:8px 0;font-size:16px;color:#333;">{date_display}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;font-size:16px;color:#555;">⏰</td>
+                  <td style="padding:8px 0;font-size:16px;font-weight:bold;color:#333;">Time</td>
+                  <td style="padding:8px 0;font-size:16px;color:#333;">{time_display}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;font-size:16px;color:#555;">👥</td>
+                  <td style="padding:8px 0;font-size:16px;font-weight:bold;color:#333;">Party Size</td>
+                  <td style="padding:8px 0;font-size:16px;color:#333;">{party_size}</td>
+                </tr>
+              </table>
+            </div>
+            """
             html_body = f"""
             <html>
             <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f4f4f4;">
