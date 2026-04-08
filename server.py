@@ -867,7 +867,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             return
         conn = get_db()
         alerts = conn.execute(
-            "SELECT a.*, w.name as watch_name FROM alerts a JOIN watches w ON a.watch_id = w.id WHERE w.user_email = ? ORDER BY a.sent_at DESC LIMIT 100",
+            "SELECT a.*, w.name as watch_name, w.target_date, w.target_time, w.party_size, w.url as watch_url FROM alerts a JOIN watches w ON a.watch_id = w.id WHERE w.user_email = ? ORDER BY a.sent_at DESC LIMIT 100",
             (email,)
         ).fetchall()
         conn.close()
