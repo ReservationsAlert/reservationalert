@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ReservationAlert.ai — Never Miss a Reservation</title>
+    <meta name="description" content="Never miss a hard-to-get reservation. ReservationAlert.ai monitors restaurants, campsites, and more — and alerts you the moment a spot opens up.">
+    <meta property="og:title" content="ReservationAlert.ai — Never Miss a Reservation">
+    <meta property="og:description" content="Monitor restaurants, campsites, and more for open reservations. Get instant email alerts when a spot opens up.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://reservationalert.ai">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="ReservationAlert.ai">
+    <meta name="twitter:description" content="Monitor restaurants, campsites, and more for open reservations. Get instant alerts when a spot opens up.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔔</text></svg>" type="image/svg+xml">
     <style>
         :root {
             --primary: #6366f1;
@@ -342,9 +351,64 @@
         /* ── Section visibility ─────────────────── */
         .section { display: none; }
         .section.active { display: block; }
+    
+        
+        /* Toast notifications */
+        .toast {
+            pointer-events: auto;
+            padding: 14px 20px;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in forwards;
+            animation-delay: 0s, 3.5s;
+            max-width: 360px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toast.success { background: #22c55e; }
+        .toast.error { background: #ef4444; }
+        .toast.info { background: #667eea; }
+        @keyframes toastIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes toastOut { from { opacity:1; } to { opacity:0; transform:translateY(-10px); } }
+
+        /* Confirm dialog overlay */
+        .confirm-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 10001; animation: fadeIn 0.15s ease-out;
+        }
+        .confirm-box {
+            background: #1e1e2e; border-radius: 14px; padding: 28px;
+            max-width: 380px; width: 90%; text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .confirm-box p { color: #ccc; margin-bottom: 20px; font-size: 15px; }
+        .confirm-buttons { display: flex; gap: 12px; justify-content: center; }
+        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+        @media (prefers-reduced-motion: reduce) {
+            .toast, .confirm-overlay { animation: none !important; }
+        }
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
     </style>
 </head>
-<body>
+
+    <!-- Toast notification system -->
+    <div id="toast-container" style="position:fixed;top:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:10px;pointer-events:none;"></div>
+    <body>
 
 <header>
     <div class="header-inner">
@@ -371,7 +435,8 @@
         <h2 style="margin-bottom:8px;">Welcome to ReservationAlert.ai</h2>
         <p style="color:var(--text-dim); margin-bottom:24px;">Enter your email to sign in or create an account. We'll send you a magic link — no password needed.</p>
         <div id="login-form">
-            <input type="email" class="form-input" id="login-email" placeholder="you@example.com" style="margin-bottom:12px; text-align:center;">
+            <label for="login-email" class="sr-only">Email address</label>
+            <input type="email" class="form-input" id="login-email" placeholder="you@example.com" aria-label="Email address" style="margin-bottom:12px; text-align:center;">
             <button class="btn btn-primary" onclick="sendMagicLink()" style="width:100%;" id="login-btn">Send Sign-In Link</button>
         </div>
         <div id="login-sent" style="display:none;">
@@ -502,18 +567,18 @@
         </div>
 
         <div class="form-group">
-            <label class="form-label">Name</label>
+            <label class="form-label" for="watch-name">Name</label>
             <input type="text" class="form-input" id="watch-name" placeholder="e.g. French Laundry, Yosemite Site 42">
         </div>
 
         <div class="form-group">
-            <label class="form-label">Reservation Page URL</label>
+            <label class="form-label" for="watch-url">Reservation Page URL</label>
             <input type="url" class="form-input" id="watch-url" placeholder="https://resy.com/cities/sf/restaurant-name">
             <div class="form-hint">Paste the direct link to the reservation or availability page</div>
         </div>
 
         <div class="form-group" id="site-numbers-group" style="display:none;">
-            <label class="form-label">Campsite Numbers</label>
+            <label class="form-label" for="watch-site-numbers">Campsite Numbers</label>
             <input type="text" class="form-input" id="watch-site-numbers" placeholder="e.g. 42, 57, 103">
             <div class="form-hint">Comma-separated site numbers you want. Leave blank to watch for any availability.</div>
         </div>
@@ -521,21 +586,24 @@
         <div class="form-row">
             <div class="form-group">
                 <label class="form-label">From Date</label>
+                <label for="watch-date-from" class="sr-only">From date</label>
                 <input type="date" class="form-input" id="watch-date-from">
             </div>
             <div class="form-group">
                 <label class="form-label">To Date</label>
+                <label for="watch-date-to" class="sr-only">To date</label>
                 <input type="date" class="form-input" id="watch-date-to">
             </div>
             <div class="form-group" id="time-group">
                 <label class="form-label">Preferred Time</label>
+                <label for="watch-time" class="sr-only">Preferred time</label>
                 <input type="time" class="form-input" id="watch-time" value="19:00">
             </div>
         </div>
 
         <div class="form-row">
             <div class="form-group" id="party-group">
-                <label class="form-label">Party Size</label>
+                <label class="form-label" for="watch-party">Party Size</label>
                 <select class="form-select" id="watch-party">
                     <option value="1">1 person</option>
                     <option value="2" selected>2 people</option>
@@ -546,7 +614,7 @@
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label">Notify Via</label>
+                <label class="form-label" for="watch-notify">Notify Via</label>
                 <select class="form-select" id="watch-notify">
                     <option value="email">Email</option>
                     <option value="sms">SMS</option>
@@ -557,11 +625,12 @@
 
         <div class="form-group" id="phone-group" style="display:none;">
             <label class="form-label">Phone Number (for SMS)</label>
-            <input type="tel" class="form-input" id="watch-phone" placeholder="+1 555 123 4567">
+            <label for="watch-phone" class="sr-only">Phone number</label>
+                <input type="tel" class="form-input" id="watch-phone" placeholder="+1 555 123 4567">
         </div>
 
         <div class="form-group">
-            <label class="form-label">Custom Pattern (optional)</label>
+            <label class="form-label" for="watch-pattern">Custom Pattern (optional)</label>
             <input type="text" class="form-input" id="watch-pattern" placeholder="e.g. available|book now">
             <div class="form-hint">Regex pattern to look for on the page. Leave blank for smart auto-detection.</div>
         </div>
@@ -574,6 +643,36 @@
 </div>
 
 <script>
+    // ── Toast System ─────────────────────────────
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast ' + type;
+        const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+        toast.textContent = (icons[type] || '') + ' ' + message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
+    function showConfirm(message) {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay';
+            overlay.innerHTML = `
+                <div class="confirm-box">
+                    <p>${message}</p>
+                    <div class="confirm-buttons">
+                        <button class="btn" style="background:#444;color:#fff;padding:10px 24px;border-radius:8px;" id="confirm-no">Cancel</button>
+                        <button class="btn btn-primary" style="padding:10px 24px;border-radius:8px;background:#ef4444;" id="confirm-yes">Delete</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            overlay.querySelector('#confirm-yes').onclick = () => { overlay.remove(); resolve(true); };
+            overlay.querySelector('#confirm-no').onclick = () => { overlay.remove(); resolve(false); };
+            overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); resolve(false); } });
+        });
+    }
+
 // ── State ──────────────────────────────────
 let watches = [];
 let alerts = [];
@@ -836,6 +935,10 @@ function renderRecentActivity() {
 
 // ── Actions ────────────────────────────────
 async function submitWatch() {
+        const submitBtn = document.getElementById('modal-submit-btn');
+        const origText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving...';
     const editId = document.getElementById('editing-watch-id').value;
     const data = {
         watch_type: selectedType,
@@ -852,7 +955,7 @@ async function submitWatch() {
     };
 
     if (!data.name || !data.url) {
-        alert('Please fill in the name and URL fields.');
+        showToast('Please fill in the name and URL fields.', 'error');
         return;
     }
 
@@ -895,19 +998,23 @@ function editWatch(id) {
     openModal(id);
 }
 
-async function deleteWatch(id) {
-    if (!confirm('Delete this watch? This cannot be undone.')) return;
+async async function deleteWatch(id) {
+    const confirmed = await showConfirm('Delete this watch? This cannot be undone.');
+    if (!confirmed) return;
     await api(`/watches/${id}`, { method: 'DELETE' });
+    showToast('Watch deleted', 'success');
     loadAll();
 }
 
 async function toggleWatch(id, currentStatus) {
     const newStatus = currentStatus === 'active' ? 'paused' : 'active';
     await api(`/watches/${id}`, { method: 'PUT', body: { status: newStatus } });
+    showToast(newStatus === 'active' ? 'Watch resumed' : 'Watch paused', 'success');
     loadAll();
 }
 
 async function triggerCheck(id) {
+    showToast('Checking now...', 'info');
     await api(`/watches/${id}/check`, { method: 'POST' });
     // Reload after a brief delay to show updated status
     setTimeout(loadAll, 2000);
