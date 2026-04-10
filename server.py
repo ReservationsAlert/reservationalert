@@ -21,6 +21,23 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from functools import partial
 
+# ── Rate Limiting ─────────────────────────────────
+_login_attempts = {}  # {email: [timestamp, ...]}
+RATE_LIMIT_WINDOW = 300  # 5 minutes
+RATE_LIMIT_MAX = 5  # max 5 attempts per window
+
+def check_rate_limit(email):
+    """Returns True if rate limited, False if OK."""
+    now = time.time()
+    attempts = _login_attempts.get(email, [])
+    attempts = [t for t in attempts if now - t < RATE_LIMIT_WINDOW]
+    _login_attempts[email] = attempts
+    if len(attempts) >= RATE_LIMIT_MAX:
+        return True
+    attempts.append(now)
+    return False
+
+
 # ── Configuration ────────────────────────────────────────────────────────────
 
 PORT = int(os.environ.get("PORT", 8080))
@@ -670,6 +687,11 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             self._json_response({"error": "Please enter a valid email address"}, 400)
             return
 
+        # Rate limit check
+        if check_rate_limit(email):
+            self._json_response({"error": "Too many attempts. Please wait a few minutes."}, 429)
+            return
+
         # Create magic link token
         token = secrets.token_urlsafe(32)
         expires = (datetime.utcnow() + timedelta(minutes=MAGIC_LINK_EXPIRY_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
@@ -940,6 +962,10 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
