@@ -1105,6 +1105,7 @@ async function submitWatch() {
         notify_via: document.getElementById('watch-notify').value,
         phone: document.getElementById('watch-phone').value,
         check_pattern: document.getElementById('watch-pattern').value || null,
+            keep_watching: document.getElementById('watch-keep-watching').checked,
     };
 
     if (!data.name || !data.url) {
@@ -1137,6 +1138,7 @@ function editWatch(id) {
     document.getElementById('site-numbers-group').style.display = (w.watch_type === 'campground') ? '' : 'none';
     document.getElementById('watch-phone').value = w.phone || '';
     document.getElementById('watch-pattern').value = w.check_pattern || '';
+    document.getElementById('watch-keep-watching').checked = !!w.keep_watching;
 
     // Select the correct type card
     selectedType = w.watch_type || 'custom';
@@ -1202,6 +1204,7 @@ function clearForm() {
         document.getElementById(id).value = '';
     });
     document.getElementById('watch-time').value = '19:00';
+    document.getElementById('watch-keep-watching').checked = false;
 }
 
 // ── Notify type toggle ─────────────────────
