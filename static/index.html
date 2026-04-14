@@ -392,6 +392,106 @@
         @media (prefers-reduced-motion: reduce) {
             .toast, .confirm-overlay { animation: none !important; }
         }
+        
+        /* Landing page styles */
+        .landing-hero {
+            text-align: center;
+            padding: 60px 20px 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .landing-hero h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            line-height: 1.15;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #667eea, #a5b4fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .landing-hero .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-dim);
+            margin-bottom: 40px;
+            max-width: 560px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .landing-features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 900px;
+            margin: 0 auto 48px;
+            padding: 0 20px;
+        }
+        .landing-feature {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 28px 20px;
+            text-align: center;
+        }
+        .landing-feature-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+        }
+        .landing-feature h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+        .landing-feature p {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+        .landing-stats {
+            display: flex;
+            justify-content: center;
+            gap: 48px;
+            margin-bottom: 48px;
+            padding: 0 20px;
+        }
+        .landing-stat {
+            text-align: center;
+        }
+        .landing-stat .num {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+        .landing-stat .label {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+        .landing-login-section {
+            display: flex;
+            justify-content: center;
+            padding: 0 20px 60px;
+        }
+        .landing-types {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-bottom: 48px;
+            flex-wrap: wrap;
+            padding: 0 20px;
+        }
+        .landing-type {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-dim);
+            font-size: 0.95rem;
+        }
+        .landing-type span:first-child { font-size: 1.3rem; }
+        @media (max-width: 768px) {
+            .landing-hero h1 { font-size: 2rem; }
+            .landing-features { grid-template-columns: 1fr; max-width: 400px; }
+            .landing-stats { gap: 24px; flex-wrap: wrap; }
+        }
         .sr-only {
             position: absolute;
             width: 1px;
@@ -428,9 +528,61 @@
     </div>
 </header>
 
-<!-- ── Login Screen ────────────────────── -->
-<div id="login-screen" class="container" style="display:flex; justify-content:center; align-items:center; min-height:calc(100vh - 64px);">
-    <div class="card" style="max-width:420px; width:100%; text-align:center;">
+<!-- ── Landing / Login Screen ────────────────── -->
+<div id="login-screen" class="container" style="display:block; min-height:calc(100vh - 64px);">
+
+    <!-- Hero Section -->
+    <div class="landing-hero">
+        <h1>Never Miss a Hard-to-Get Reservation Again</h1>
+        <p class="subtitle">ReservationAlert.ai monitors restaurants, campsites, and booking pages around the clock — and alerts you the instant a spot opens up.</p>
+    </div>
+
+    <!-- Supported Types -->
+    <div class="landing-types">
+        <div class="landing-type"><span>🍽️</span> Restaurants</div>
+        <div class="landing-type"><span>🏕️</span> Campsites</div>
+        <div class="landing-type"><span>🎭</span> Events & Shows</div>
+        <div class="landing-type"><span>🎾</span> Courts & Venues</div>
+    </div>
+
+    <!-- How It Works -->
+    <div class="landing-features">
+        <div class="landing-feature">
+            <div class="landing-feature-icon">🎯</div>
+            <h3>1. Set a Watch</h3>
+            <p>Paste the reservation URL, pick your date and party size. Takes 30 seconds.</p>
+        </div>
+        <div class="landing-feature">
+            <div class="landing-feature-icon">🔍</div>
+            <h3>2. We Monitor 24/7</h3>
+            <p>Our engine checks the page every 5 minutes, day and night, so you don't have to.</p>
+        </div>
+        <div class="landing-feature">
+            <div class="landing-feature-icon">🔔</div>
+            <h3>3. Get Alerted Instantly</h3>
+            <p>The moment a spot opens, you get an email with the details and a direct booking link.</p>
+        </div>
+    </div>
+
+    <!-- Social Proof Stats -->
+    <div class="landing-stats">
+        <div class="landing-stat">
+            <div class="num">24/7</div>
+            <div class="label">Monitoring</div>
+        </div>
+        <div class="landing-stat">
+            <div class="num">5 min</div>
+            <div class="label">Check Interval</div>
+        </div>
+        <div class="landing-stat">
+            <div class="num">Instant</div>
+            <div class="label">Email Alerts</div>
+        </div>
+    </div>
+
+    <!-- Login Form -->
+    <div class="landing-login-section">
+        <div class="card" style="max-width:420px; width:100%; text-align:center;">
         <img src="/logo.png" alt="ReservationAlert.ai" style="width:80px; height:80px; border-radius:16px; margin-bottom:12px;">
         <h2 style="margin-bottom:8px;">Welcome to ReservationAlert.ai</h2>
         <p style="color:var(--text-dim); margin-bottom:24px;">Enter your email to sign in or create an account. We'll send you a magic link — no password needed.</p>
@@ -446,6 +598,7 @@
             <button class="btn btn-ghost" onclick="resetLoginForm()" style="margin-top:16px;">Use a different email</button>
         </div>
         <div id="login-error" style="display:none; color:var(--danger); margin-top:12px; font-size:14px;"></div>
+    </div>
     </div>
 </div>
 
