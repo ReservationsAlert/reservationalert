@@ -79,9 +79,17 @@ def init_db():
             last_result TEXT,                 -- 'available' | 'unavailable' | 'error'
             last_result_detail TEXT,          -- human-readable detail of last check
             created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
+            updated_at TEXT DEFAULT (datetime('now')),
+            keep_watching INTEGER DEFAULT 0   -- if 1, stay active after finding availability
         )
     """)
+
+    # Migration: add keep_watching column if missing
+    try:
+        conn.execute("ALTER TABLE watches ADD COLUMN keep_watching INTEGER DEFAULT 0")
+    except Exception:
+        pass
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS alerts (
             id TEXT PRIMARY KEY,
@@ -227,7 +235,7 @@ class MonitorEngine:
                 (alert_id, watch["id"], message)
             )
             conn.execute(
-                "UPDATE watches SET status = 'found', updated_at = datetime('now') WHERE id = ?",
+                "UPDATE watches SET status = CASE WHEN keep_watching = 1 THEN 'active' ELSE 'found' END, updated_at = datetime('now') WHERE id = ?",
                 (watch["id"],)
             )
             conn.commit()
@@ -802,8 +810,8 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         conn = get_db()
         conn.execute("""
             INSERT INTO watches (id, user_email, watch_type, name, url, target_date, date_from, date_to,
-                                 target_time, party_size, site_numbers, check_pattern, notify_via, phone)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 target_time, party_size, site_numbers, check_pattern, notify_via, phone, keep_watching)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             watch_id,
             email,  # Use authenticated email, not form data
@@ -819,6 +827,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             data.get("check_pattern"),
             data.get("notify_via", "email"),
             data.get("phone"),
+            1 if data.get("keep_watching") else 0,
         ))
         conn.commit()
 
