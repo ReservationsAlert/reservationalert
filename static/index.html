@@ -504,6 +504,7 @@
             border: 0;
         }
     </style>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 
     <!-- Toast notification system -->
@@ -598,6 +599,23 @@
             <button class="btn btn-ghost" onclick="resetLoginForm()" style="margin-top:16px;">Use a different email</button>
         </div>
         <div id="login-error" style="display:none; color:var(--danger); margin-top:12px; font-size:14px;"></div>
+        <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:20px;">
+            <p style="color:var(--text-dim); font-size:13px; margin-bottom:16px;">Or sign in with</p>
+            <div id="g_id_onload"
+                 data-client_id="551156719753-g35rg6gdgqp7r2lkdq811bah43nkq6i4.apps.googleusercontent.com"
+                 data-callback="handleGoogleSignIn"
+                 data-auto_prompt="false">
+            </div>
+            <div class="g_id_signin"
+                 data-type="standard"
+                 data-shape="rectangular"
+                 data-theme="filled_black"
+                 data-text="signin_with"
+                 data-size="large"
+                 data-logo_alignment="left"
+                 style="display:flex; justify-content:center;">
+            </div>
+        </div>
     </div>
     </div>
 </div>
@@ -896,6 +914,28 @@ function resetLoginForm() {
     document.getElementById('login-sent').style.display = 'none';
     document.getElementById('login-error').style.display = 'none';
     document.getElementById('login-email').value = '';
+}
+
+async function handleGoogleSignIn(response) {
+    try {
+        const res = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential: response.credential }),
+        });
+        const data = await res.json();
+        if (data.ok && data.session_token) {
+            sessionToken = data.session_token;
+            userEmail = data.email;
+            sessionStorage.setItem('session_token', sessionToken);
+            sessionStorage.setItem('user_email', userEmail);
+            showApp();
+        } else {
+            showLoginError(data.error || 'Google sign-in failed.');
+        }
+    } catch (e) {
+        showLoginError('Network error during Google sign-in.');
+    }
 }
 
 async function checkMagicLinkToken() {
