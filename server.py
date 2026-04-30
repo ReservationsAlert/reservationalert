@@ -49,6 +49,9 @@ RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "ReservationAlert <noreply@reservationalert.ai>")
 BASE_URL = os.environ.get("BASE_URL", "https://reservationalert.onrender.com")
 
+# Google OAuth config
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+
 # Auth config
 SESSION_EXPIRY_DAYS = 30
 MAGIC_LINK_EXPIRY_MINUTES = 15
@@ -661,6 +664,8 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/api/auth/login":
             self._auth_login()
+        elif self.path == "/api/auth/google":
+            self._google_auth()
         elif self.path == "/api/watches":
             self._create_watch()
         elif self.path.startswith("/api/watches/") and "/check" in self.path:
@@ -774,6 +779,68 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             self._json_response({"email": email})
         else:
             self._json_response({"error": "Not authenticated"}, 401)
+
+    def _google_auth(self):
+        """Verify a Google ID token and create a session."""
+        data = self._read_json()
+        if not data:
+            return
+        credential = data.get("credential", "")
+        if not credential:
+            self._json_response({"error": "Missing credential"}, 400)
+            return
+
+        if not GOOGLE_CLIENT_ID:
+            self._json_response({"error": "Google OAuth not configured"}, 500)
+            return
+
+        # Verify the token with Google's tokeninfo endpoint
+        try:
+            verify_url = f"https://oauth2.googleapis.com/tokeninfo?id_token={credential}"
+            req = urllib.request.Request(verify_url)
+            with urllib.request.urlopen(req) as resp:
+                token_info = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            print(f"[Auth] Google token verification failed: {e}")
+            self._json_response({"error": "Invalid Google token"}, 401)
+            return
+        except Exception as e:
+            print(f"[Auth] Google token verification error: {e}")
+            self._json_response({"error": "Failed to verify Google token"}, 500)
+            return
+
+        # Verify the token is for our app
+        if token_info.get("aud") != GOOGLE_CLIENT_ID:
+            self._json_response({"error": "Token not issued for this application"}, 401)
+            return
+
+        # Check email is verified
+        if token_info.get("email_verified") != "true":
+            self._json_response({"error": "Email not verified by Google"}, 401)
+            return
+
+        email = token_info.get("email", "").strip().lower()
+        if not email:
+            self._json_response({"error": "No email in Google token"}, 401)
+            return
+
+        # Create session token (same as magic link flow)
+        session_token = secrets.token_urlsafe(48)
+        session_expires = (datetime.utcnow() + timedelta(days=SESSION_EXPIRY_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO auth_tokens (token, email, token_type, expires_at) VALUES (?, ?, 'session', ?)",
+            (session_token, email, session_expires)
+        )
+        conn.commit()
+        conn.close()
+
+        print(f"[Auth] Google sign-in successful for {email}")
+        self._json_response({
+            "ok": True,
+            "session_token": session_token,
+            "email": email,
+        })
 
     # ── API Endpoints ────────────────────────────────────────────────────────
 
