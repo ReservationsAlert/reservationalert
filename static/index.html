@@ -530,94 +530,108 @@
     </div>
 </header>
 
-<!-- ── Landing / Login Screen ────────────────── -->
-<div id="login-screen" class="container" style="display:block; min-height:calc(100vh - 64px);">
+<!-- ââ Landing Page ââââââââââââââââââââââ -->
+<div id="login-screen">
 
     <!-- Hero Section -->
-    <div class="landing-hero">
-        <h1>Never Miss a Hard-to-Get Reservation Again</h1>
-        <p class="subtitle">ReservationAlert.ai monitors restaurants, campsites, and booking pages around the clock — and alerts you the instant a spot opens up.</p>
-    </div>
-
-    <!-- Supported Types -->
-    <div class="landing-types">
-        <div class="landing-type"><span>🍽️</span> Restaurants</div>
-        <div class="landing-type"><span>🏕️</span> Campsites</div>
-        <div class="landing-type"><span>🎭</span> Events & Shows</div>
-        <div class="landing-type"><span>🎾</span> Courts & Venues</div>
+    <div style="text-align:center; padding:80px 24px 48px; max-width:720px; margin:0 auto;">
+        <div style="display:inline-block; background:rgba(99,102,241,0.15); color:var(--primary-light); padding:6px 16px; border-radius:20px; font-size:13px; font-weight:600; margin-bottom:24px;">
+            Monitoring reservations 24/7
+        </div>
+        <h1 style="font-size:clamp(2rem, 5vw, 3.2rem); font-weight:800; line-height:1.15; margin-bottom:20px; letter-spacing:-0.02em;">
+            Never Miss a<br>
+            <span style="background:linear-gradient(135deg, var(--primary), #818cf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">Hard-to-Get Reservation</span>
+        </h1>
+        <p style="font-size:1.15rem; color:var(--text-dim); max-width:540px; margin:0 auto 40px; line-height:1.6;">
+            ReservationAlert monitors restaurants, campsites, and more around the clock â and alerts you the moment a spot opens up.
+        </p>
+        <a href="#login-card" style="display:inline-block;" onclick="document.getElementById('login-card').scrollIntoView({behavior:'smooth'}); return false;">
+            <button class="btn btn-primary" style="font-size:1.05rem; padding:14px 36px; border-radius:10px;">Get Started Free</button>
+        </a>
     </div>
 
     <!-- How It Works -->
-    <div class="landing-features">
-        <div class="landing-feature">
-            <div class="landing-feature-icon">🎯</div>
-            <h3>1. Set a Watch</h3>
-            <p>Paste the reservation URL, pick your date and party size. Takes 30 seconds.</p>
-        </div>
-        <div class="landing-feature">
-            <div class="landing-feature-icon">🔍</div>
-            <h3>2. We Monitor 24/7</h3>
-            <p>Our engine checks the page every 5 minutes, day and night, so you don't have to.</p>
-        </div>
-        <div class="landing-feature">
-            <div class="landing-feature-icon">🔔</div>
-            <h3>3. Get Alerted Instantly</h3>
-            <p>The moment a spot opens, you get an email with the details and a direct booking link.</p>
-        </div>
-    </div>
-
-    <!-- Social Proof Stats -->
-    <div class="landing-stats">
-        <div class="landing-stat">
-            <div class="num">24/7</div>
-            <div class="label">Monitoring</div>
-        </div>
-        <div class="landing-stat">
-            <div class="num">5 min</div>
-            <div class="label">Check Interval</div>
-        </div>
-        <div class="landing-stat">
-            <div class="num">Instant</div>
-            <div class="label">Email Alerts</div>
-        </div>
-    </div>
-
-    <!-- Login Form -->
-    <div class="landing-login-section">
-        <div class="card" style="max-width:420px; width:100%; text-align:center;">
-        <img src="/logo.png" alt="ReservationAlert.ai" style="width:80px; height:80px; border-radius:16px; margin-bottom:12px;">
-        <h2 style="margin-bottom:8px;">Welcome to ReservationAlert.ai</h2>
-        <p style="color:var(--text-dim); margin-bottom:24px;">Enter your email to sign in or create an account. We'll send you a magic link — no password needed.</p>
-        <div id="login-form">
-            <label for="login-email" class="sr-only">Email address</label>
-            <input type="email" class="form-input" id="login-email" placeholder="you@example.com" aria-label="Email address" style="margin-bottom:12px; text-align:center;">
-            <button class="btn btn-primary" onclick="sendMagicLink()" style="width:100%;" id="login-btn">Send Sign-In Link</button>
-        </div>
-        <div id="login-sent" style="display:none;">
-            <div style="font-size:32px; margin-bottom:12px;">📧</div>
-            <p style="color:var(--success); font-weight:600; margin-bottom:8px;">Check your email!</p>
-            <p style="color:var(--text-dim); font-size:14px;">We sent a sign-in link to <strong id="login-sent-email"></strong>. Click it to sign in.</p>
-            <button class="btn btn-ghost" onclick="resetLoginForm()" style="margin-top:16px;">Use a different email</button>
-        </div>
-        <div id="login-error" style="display:none; color:var(--danger); margin-top:12px; font-size:14px;"></div>
-        <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:20px;">
-            <p style="color:var(--text-dim); font-size:13px; margin-bottom:16px;">Or sign in with</p>
-            <div id="g_id_onload"
-                 data-client_id="551156719753-g35rg6gdgqp7r2lkdq811bah43nkq6i4.apps.googleusercontent.com"
-                 data-callback="handleGoogleSignIn"
-                 data-auto_prompt="false">
+    <div style="max-width:880px; margin:0 auto; padding:0 24px 56px;">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:24px;">
+            <div class="card" style="text-align:center; padding:32px 24px;">
+                <div style="font-size:40px; margin-bottom:12px;">ð¯</div>
+                <div style="font-weight:700; font-size:1.05rem; margin-bottom:8px;">1. Set a Watch</div>
+                <p style="font-size:14px; color:var(--text-dim); line-height:1.5;">Paste the reservation URL, pick your dates, and choose how you want to be notified.</p>
             </div>
-            <div class="g_id_signin"
-                 data-type="standard"
-                 data-shape="rectangular"
-                 data-theme="filled_black"
-                 data-text="signin_with"
-                 data-size="large"
-                 data-logo_alignment="left"
-                 style="display:flex; justify-content:center;">
+            <div class="card" style="text-align:center; padding:32px 24px;">
+                <div style="font-size:40px; margin-bottom:12px;">ð</div>
+                <div style="font-weight:700; font-size:1.05rem; margin-bottom:8px;">2. We Monitor 24/7</div>
+                <p style="font-size:14px; color:var(--text-dim); line-height:1.5;">Our engine checks every 5 minutes, day and night, so you don't have to keep refreshing.</p>
+            </div>
+            <div class="card" style="text-align:center; padding:32px 24px;">
+                <div style="font-size:40px; margin-bottom:12px;">ð</div>
+                <div style="font-weight:700; font-size:1.05rem; margin-bottom:8px;">3. Get Alerted Instantly</div>
+                <p style="font-size:14px; color:var(--text-dim); line-height:1.5;">The moment a spot opens up, you get an email with a direct link to book it.</p>
             </div>
         </div>
     </div>
+
+    <!-- Use Cases -->
+    <div style="max-width:880px; margin:0 auto; padding:0 24px 56px;">
+        <h2 style="text-align:center; font-size:1.5rem; font-weight:700; margin-bottom:32px;">Works with any reservation system</h2>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:20px;">
+            <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:24px;">
+                <div style="font-size:28px; margin-bottom:8px;">ð½ï¸</div>
+                <div style="font-weight:600; margin-bottom:6px;">Restaurants</div>
+                <p style="font-size:13px; color:var(--text-dim); line-height:1.5;">Resy, OpenTable, Tock â get alerts when that impossible dinner reservation opens up.</p>
+            </div>
+            <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:24px;">
+                <div style="font-size:28px; margin-bottom:8px;">ðï¸</div>
+                <div style="font-weight:600; margin-bottom:6px;">Campgrounds</div>
+                <p style="font-size:13px; color:var(--text-dim); line-height:1.5;">Recreation.gov, Reserve California â snag sold-out campsites when cancellations happen.</p>
+            </div>
+            <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:24px;">
+                <div style="font-size:28px; margin-bottom:8px;">ð</div>
+                <div style="font-weight:600; margin-bottom:6px;">Any URL</div>
+                <p style="font-size:13px; color:var(--text-dim); line-height:1.5;">Custom pattern matching â monitor any page for text changes that signal availability.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sign In Card -->
+    <div style="max-width:420px; margin:0 auto; padding:0 24px 80px;" id="login-card">
+        <div class="card" style="text-align:center;">
+            <h2 style="margin-bottom:8px; font-size:1.3rem;">Start Monitoring Now</h2>
+            <p style="color:var(--text-dim); margin-bottom:24px; font-size:14px;">Free to use. No credit card required.</p>
+            <div id="login-form">
+                <input type="email" class="form-input" id="login-email" placeholder="you@example.com" style="margin-bottom:12px; text-align:center;">
+                <button class="btn btn-primary" onclick="sendMagicLink()" style="width:100%;" id="login-btn">Send Sign-In Link</button>
+            </div>
+            <div id="login-sent" style="display:none;">
+                <div style="font-size:32px; margin-bottom:12px;">ð§</div>
+                <p style="color:var(--success); font-weight:600; margin-bottom:8px;">Check your email!</p>
+                <p style="color:var(--text-dim); font-size:14px;">We sent a sign-in link to <strong id="login-sent-email"></strong>. Click it to sign in.</p>
+                <button class="btn btn-ghost" onclick="resetLoginForm()" style="margin-top:16px;">Use a different email</button>
+            </div>
+            <div id="login-error" style="display:none; color:var(--danger); margin-top:12px; font-size:14px;"></div>
+            <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:20px;">
+                <p style="color:var(--text-dim); font-size:13px; margin-bottom:16px;">Or sign in with</p>
+                <div id="g_id_onload"
+                     data-client_id="551156719753-g35rg6gdgqp7r2lkdq811bah43nkq6i4.apps.googleusercontent.com"
+                     data-callback="handleGoogleSignIn"
+                     data-auto_prompt="false">
+                </div>
+                <div class="g_id_signin"
+                     data-type="standard"
+                     data-shape="rectangular"
+                     data-theme="filled_black"
+                     data-text="signin_with"
+                     data-size="large"
+                     data-logo_alignment="left"
+                     style="display:flex; justify-content:center;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="text-align:center; padding:24px; border-top:1px solid var(--border); color:var(--text-dim); font-size:13px;">
+        &copy; 2026 ReservationAlert.ai â Built with care in the USA
     </div>
 </div>
 
