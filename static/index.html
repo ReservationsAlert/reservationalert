@@ -522,6 +522,7 @@
                 <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
                 <button class="nav-tab" data-tab="watches">My Watches</button>
                 <button class="nav-tab" data-tab="alerts">Alerts</button>
+                <button class="nav-tab" data-tab="settings">Settings</button>
             </div>
             <button class="btn btn-primary" onclick="openModal()">+ New Watch</button>
             <button class="btn btn-ghost btn-sm" id="user-btn" onclick="logout()" title="Sign out"></button>
@@ -707,6 +708,62 @@
                     <div class="empty-state-icon">🔕</div>
                     <div class="empty-state-title">No alerts yet</div>
                     <p>Alerts will appear here when availability is found</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <!-- ── Settings ────────────────────────── -->
+    <div id="section-settings" class="section">
+        <div class="card" style="max-width:600px;">
+            <div class="card-header">
+                <div class="card-title">Account Settings</div>
+            </div>
+            <div style="padding:4px 0;">
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" id="settings-email" disabled style="opacity:0.6;">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Phone Number</label>
+                    <input type="tel" class="form-input" id="settings-phone" placeholder="+1 (555) 123-4567">
+                    <small style="color:var(--text-dim); font-size:12px;">For SMS alerts (optional)</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Timezone</label>
+                    <select class="form-input" id="settings-timezone">
+                        <option value="America/New_York">Eastern (ET)</option>
+                        <option value="America/Chicago">Central (CT)</option>
+                        <option value="America/Denver">Mountain (MT)</option>
+                        <option value="America/Los_Angeles">Pacific (PT)</option>
+                        <option value="America/Anchorage">Alaska (AKT)</option>
+                        <option value="Pacific/Honolulu">Hawaii (HT)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quiet Hours</label>
+                    <div style="display:flex; gap:12px; align-items:center;">
+                        <input type="time" class="form-input" id="settings-quiet-start" style="flex:1;">
+                        <span style="color:var(--text-dim);">to</span>
+                        <input type="time" class="form-input" id="settings-quiet-end" style="flex:1;">
+                    </div>
+                    <small style="color:var(--text-dim); font-size:12px;">No notifications during these hours (leave blank to disable)</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notification Preferences</label>
+                    <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px; cursor:pointer;">
+                        <input type="checkbox" id="settings-notify-email" checked>
+                        <span>Email notifications</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" id="settings-notify-sms">
+                        <span>SMS notifications</span>
+                    </label>
+                </div>
+                <div style="display:flex; gap:12px; align-items:center; margin-top:20px;">
+                    <button class="btn btn-primary" onclick="saveSettings()" id="save-settings-btn">Save Settings</button>
+                    <span id="settings-status" style="color:var(--success); font-size:14px; display:none;">Settings saved!</span>
                 </div>
             </div>
         </div>
@@ -997,6 +1054,7 @@ async function loadAll() {
         api('/stats'),
         api('/alerts'),
     ]);
+    loadSettings();
     if (!results[0]) return; // auth failed
     [watches, stats, alerts] = results;
     if (Array.isArray(watches)) {
@@ -1253,6 +1311,52 @@ document.getElementById('watch-notify').addEventListener('change', e => {
         (e.target.value === 'sms' || e.target.value === 'both') ? '' : 'none';
 });
 
+// ── Settings ──────────────────────────────
+async function loadSettings() {
+    const data = await api('/settings');
+    if (!data) return;
+    document.getElementById('settings-email').value = data.email || userEmail;
+    document.getElementById('settings-phone').value = data.phone || '';
+    document.getElementById('settings-timezone').value = data.timezone || 'America/New_York';
+    document.getElementById('settings-quiet-start').value = data.quiet_hours_start || '';
+    document.getElementById('settings-quiet-end').value = data.quiet_hours_end || '';
+    document.getElementById('settings-notify-email').checked = data.notify_email !== 0;
+    document.getElementById('settings-notify-sms').checked = data.notify_sms === 1;
+}
+
+async function saveSettings() {
+    const btn = document.getElementById('save-settings-btn');
+    btn.textContent = 'Saving...';
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`,
+            },
+            body: JSON.stringify({
+                phone: document.getElementById('settings-phone').value,
+                timezone: document.getElementById('settings-timezone').value,
+                quiet_hours_start: document.getElementById('settings-quiet-start').value,
+                quiet_hours_end: document.getElementById('settings-quiet-end').value,
+                notify_email: document.getElementById('settings-notify-email').checked,
+                notify_sms: document.getElementById('settings-notify-sms').checked,
+            }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            const status = document.getElementById('settings-status');
+            status.style.display = 'inline';
+            setTimeout(() => { status.style.display = 'none'; }, 3000);
+        }
+    } catch (e) {
+        console.error('Failed to save settings:', e);
+    }
+    btn.textContent = 'Save Settings';
+    btn.disabled = false;
+}
+
 // ── Tab Navigation ─────────────────────────
 document.querySelectorAll('.nav-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1260,6 +1364,7 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById(`section-${tab.dataset.tab}`).classList.add('active');
+        if (tab.dataset.tab === 'settings') loadSettings();
     });
 });
 
