@@ -842,6 +842,64 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
             "email": email,
         })
 
+    # ── Settings Endpoints ────────────────────────────────────────────────────
+
+    def _get_settings(self):
+        """Return user settings."""
+        email = self._require_auth()
+        if not email:
+            return
+        conn = get_db()
+        row = conn.execute("SELECT * FROM user_settings WHERE email = ?", (email,)).fetchone()
+        conn.close()
+        if row:
+            self._json_response(dict(row))
+        else:
+            self._json_response({
+                "email": email,
+                "phone": "",
+                "timezone": "America/New_York",
+                "quiet_hours_start": "",
+                "quiet_hours_end": "",
+                "notify_email": 1,
+                "notify_sms": 0,
+            })
+
+    def _update_settings(self):
+        """Update user settings."""
+        email = self._require_auth()
+        if not email:
+            return
+        data = self._read_json()
+        if not data:
+            return
+
+        phone = (data.get("phone") or "").strip()
+        timezone = (data.get("timezone") or "America/New_York").strip()
+        quiet_start = (data.get("quiet_hours_start") or "").strip()
+        quiet_end = (data.get("quiet_hours_end") or "").strip()
+        notify_email = 1 if data.get("notify_email", True) else 0
+        notify_sms = 1 if data.get("notify_sms", False) else 0
+
+        conn = get_db()
+        conn.execute("""
+            INSERT INTO user_settings (email, phone, timezone, quiet_hours_start, quiet_hours_end, notify_email, notify_sms, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(email) DO UPDATE SET
+                phone = excluded.phone,
+                timezone = excluded.timezone,
+                quiet_hours_start = excluded.quiet_hours_start,
+                quiet_hours_end = excluded.quiet_hours_end,
+                notify_email = excluded.notify_email,
+                notify_sms = excluded.notify_sms,
+                updated_at = datetime('now')
+        """, (email, phone, timezone, quiet_start, quiet_end, notify_email, notify_sms))
+        conn.commit()
+        conn.close()
+
+        print(f"[Settings] Updated settings for {email}")
+        self._json_response({"ok": True})
+
     # ── API Endpoints ────────────────────────────────────────────────────────
 
     def _get_watches(self):
