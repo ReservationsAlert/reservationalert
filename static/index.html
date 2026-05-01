@@ -348,7 +348,24 @@
             border: 1px solid rgba(99, 102, 241, 0.2);
             color: var(--text-dim);
         }
-        /* ── Section visibility ─────────────────── */
+                /* ââ Filter Buttons âââââââââââââââââââââââ */
+        .filter-btn {
+            padding: 5px 14px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .filter-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+        .filter-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.05); }
+/* ── Section visibility ─────────────────── */
         .section { display: none; }
         .section.active { display: block; }
     
@@ -701,7 +718,24 @@
             <div class="card-title">My Watches</div>
             <button class="btn btn-primary btn-sm" onclick="openModal()">+ New Watch</button>
         </div>
-        <div id="watches-list">
+                <!-- Sort & Filter Bar -->
+        <div id="watch-filters" style="display:none; margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <div style="display:flex; gap:4px; background:var(--bg-input); border-radius:8px; padding:3px;">
+                <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+                <button class="filter-btn" data-filter="active" onclick="setFilter('active')">Active</button>
+                <button class="filter-btn" data-filter="found" onclick="setFilter('found')">Found</button>
+                <button class="filter-btn" data-filter="paused" onclick="setFilter('paused')">Paused</button>
+            </div>
+            <select class="form-input" id="watch-sort" onchange="setSort(this.value)" style="width:auto; padding:6px 12px; font-size:13px;">
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="name">Name A-Z</option>
+                <option value="status">By Status</option>
+                <option value="type">By Type</option>
+            </select>
+            <input type="text" class="form-input" id="watch-search" placeholder="Search watches..." oninput="renderWatches()" style="width:auto; min-width:180px; padding:6px 12px; font-size:13px;">
+        </div>
+<div id="watches-list">
             <div class="empty-state">
                 <div class="empty-state-icon">👀</div>
                 <div class="empty-state-title">No watches yet</div>
@@ -922,6 +956,8 @@ let stats = {};
 let selectedType = 'restaurant';
 let sessionToken = null;
 let userEmail = null;
+let currentFilter = 'all';
+let currentSort = 'newest';
 
 // ── API Helpers ────────────────────────────
 async function api(path, options = {}) {
@@ -1087,31 +1123,85 @@ function renderStats() {
     document.getElementById('stat-alerts').textContent = stats.total_alerts || 0;
 }
 
+function setFilter(f) {
+    currentFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
+    renderWatches();
+}
+
+function setSort(s) {
+    currentSort = s;
+    renderWatches();
+}
+
+function getFilteredWatches() {
+    let filtered = [...watches];
+    // Filter by status
+    if (currentFilter !== 'all') {
+        filtered = filtered.filter(w => w.status === currentFilter);
+    }
+    // Search
+    const search = (document.getElementById('watch-search')?.value || '').toLowerCase();
+    if (search) {
+        filtered = filtered.filter(w =>
+            (w.name || '').toLowerCase().includes(search) ||
+            (w.url || '').toLowerCase().includes(search) ||
+            (w.watch_type || '').toLowerCase().includes(search)
+        );
+    }
+    // Sort
+    const statusOrder = { found: 0, active: 1, paused: 2, expired: 3 };
+    filtered.sort((a, b) => {
+        switch (currentSort) {
+            case 'newest': return (b.id || '').localeCompare(a.id || '');
+            case 'oldest': return (a.id || '').localeCompare(b.id || '');
+            case 'name': return (a.name || '').localeCompare(b.name || '');
+            case 'status': return (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+            case 'type': return (a.watch_type || '').localeCompare(b.watch_type || '');
+            default: return 0;
+        }
+    });
+    return filtered;
+}
+
 function renderWatches() {
     const container = document.getElementById('watches-list');
+    const filtersBar = document.getElementById('watch-filters');
     if (!watches.length) {
+        if (filtersBar) filtersBar.style.display = 'none';
         container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">👀</div>
+                <div class="empty-state-icon">ð</div>
                 <div class="empty-state-title">No watches yet</div>
                 <p>Start monitoring a reservation by clicking "New Watch"</p>
                 <button class="btn btn-primary" style="margin-top:16px;" onclick="openModal()">+ Create Your First Watch</button>
             </div>`;
         return;
     }
-    container.innerHTML = watches.map(w => `
+    if (filtersBar) filtersBar.style.display = 'flex';
+    const filtered = getFilteredWatches();
+    if (!filtered.length) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding:40px 24px;">
+                <div class="empty-state-icon" style="font-size:32px;">ð</div>
+                <div class="empty-state-title" style="font-size:16px;">No matches</div>
+                <p>Try a different filter or search term</p>
+            </div>`;
+        return;
+    }
+    container.innerHTML = filtered.map(w => `
         <div class="watch-item" style="flex-wrap:wrap;">
             <div class="watch-icon ${w.watch_type}">
-                ${w.watch_type === 'restaurant' ? '🍽️' : w.watch_type === 'campground' ? '🏕️' : '🌐'}
+                ${w.watch_type === 'restaurant' ? 'ð½ï¸' : w.watch_type === 'campground' ? 'ðï¸' : 'ð'}
             </div>
             <div class="watch-details">
                 <div class="watch-name">${esc(w.name)}</div>
                 <div class="watch-meta">
-                    ${w.date_from && w.date_to ? `<span>📅 ${w.date_from} → ${w.date_to}</span>` : w.date_from ? `<span>📅 From ${w.date_from}</span>` : w.date_to ? `<span>📅 Until ${w.date_to}</span>` : w.target_date ? `<span>📅 ${w.target_date}</span>` : ''}
-                    ${w.target_time ? `<span>🕐 ${w.target_time}</span>` : ''}
-                    ${w.party_size ? `<span>👥 ${w.party_size}</span>` : ''}
-                    ${w.site_numbers ? `<span>🏕️ Sites: ${esc(w.site_numbers)}</span>` : ''}
-                    <span>📧 ${esc(w.user_email)}</span>
+                    ${w.date_from && w.date_to ? `<span>ð ${w.date_from} â ${w.date_to}</span>` : w.date_from ? `<span>ð From ${w.date_from}</span>` : w.date_to ? `<span>ð Until ${w.date_to}</span>` : w.target_date ? `<span>ð ${w.target_date}</span>` : ''}
+                    ${w.target_time ? `<span>ð ${w.target_time}</span>` : ''}
+                    ${w.party_size ? `<span>ð¥ ${w.party_size}</span>` : ''}
+                    ${w.site_numbers ? `<span>ðï¸ Sites: ${esc(w.site_numbers)}</span>` : ''}
+                    <span>ð§ ${esc(w.user_email)}</span>
                     ${w.last_checked_at ? `<span>Last checked: ${timeAgo(w.last_checked_at)}</span>` : ''}
                 </div>
             </div>
@@ -1120,28 +1210,28 @@ function renderWatches() {
                 ${w.status}
             </span>
             <div class="watch-actions">
-                <button class="btn-icon" title="Edit" onclick="editWatch('${w.id}')">✏️</button>
-                <button class="btn-icon" title="Check now" onclick="triggerCheck('${w.id}')">🔄</button>
+                <button class="btn-icon" title="Edit" onclick="editWatch('${w.id}')">âï¸</button>
+                <button class="btn-icon" title="Check now" onclick="triggerCheck('${w.id}')">ð</button>
                 <button class="btn-icon" title="${w.status === 'active' ? 'Pause' : 'Resume'}" onclick="toggleWatch('${w.id}', '${w.status}')">
-                    ${w.status === 'active' ? '⏸' : '▶️'}
+                    ${w.status === 'active' ? 'â¸' : 'â¶ï¸'}
                 </button>
-                <button class="btn-icon" title="Delete" onclick="deleteWatch('${w.id}')">🗑</button>
+                <button class="btn-icon" title="Delete" onclick="deleteWatch('${w.id}')">ð</button>
             </div>
             ${w.status === 'found' || w.last_result === 'available' ? `
             <div class="watch-found-banner">
                 <div class="found-info">
-                    <span class="found-label">🎉 Availability Found!</span>
+                    <span class="found-label">ð Availability Found!</span>
                     <span class="found-detail">${esc(w.last_result_detail || 'A match was detected on the page')}</span>
                 </div>
-                <a href="${esc(w.url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Book Now →</a>
+                <a href="${esc(w.url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Book Now â</a>
             </div>` : ''}
             ${w.last_result === 'error' ? `
             <div class="watch-error-banner">
-                <span>⚠️ Last check encountered an error${w.last_result_detail ? ': ' + esc(w.last_result_detail) : ''}</span>
+                <span>â ï¸ Last check encountered an error${w.last_result_detail ? ': ' + esc(w.last_result_detail) : ''}</span>
             </div>` : ''}
             ${w.last_result === 'unavailable' && w.status === 'active' ? `
             <div class="watch-status-banner">
-                <span>🔍 Monitoring — no availability yet. Checking every 5 minutes.</span>
+                <span>ð Monitoring â no availability yet. Checking every 5 minutes.</span>
             </div>` : ''}
         </div>
     `).join('');
