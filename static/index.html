@@ -796,18 +796,28 @@ let currentSort = 'newest';
 async function api(path, options = {}) {
     const headers = { 'Content-Type': 'application/json' };
     if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
-    const res = await fetch(`/api${path}`, {
-        headers,
-        ...options,
-        body: options.body ? JSON.stringify(options.body) : undefined,
-    });
-    const data = await res.json();
+    let res;
+    try {
+        res = await fetch(`/api${path}`, {
+            method: options.method || 'GET',
+            headers,
+            body: options.body ? JSON.stringify(options.body) : undefined,
+        });
+    } catch (e) {
+        console.error(`[API] Network error on ${path}:`, e);
+        return { error: 'Network error \u2014 please check your connection.' };
+    }
     if (res.status === 401 && sessionToken) {
-        // Session expired
         logout();
         return null;
     }
-    return data;
+    try {
+        const data = await res.json();
+        return data;
+    } catch (e) {
+        console.error(`[API] JSON parse error on ${path}:`, e);
+        return { error: `Server error (${res.status}). Please try again.` };
+    }
 }
 
 // ââ Auth âââââââââââââââââââââââââââââââââââ
@@ -1144,13 +1154,36 @@ async function submitWatch() {
         return;
     }
 
-    if (editId) {
-        await api(`/watches/${editId}`, { method: 'PUT', body: data });
-    } else {
-        await api('/watches', { method: 'POST', body: data });
+    const btn = document.getElementById('modal-submit-btn');
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
+
+    try {
+        let result;
+        if (editId) {
+            result = await api(`/watches/${editId}`, { method: 'PUT', body: data });
+        } else {
+            result = await api('/watches', { method: 'POST', body: data });
+        }
+
+        if (!result) {
+            // api() returned null \u2192 401 \u2192 logout already called
+            return;
+        }
+        if (result.error) {
+            alert(`Error: ${result.error}`);
+            return;
+        }
+
+        closeModal();
+        loadAll();
+    } catch (e) {
+        console.error('[submitWatch] Unexpected error:', e);
+        alert('Something went wrong. Please try again.');
+    } finally {
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
     }
-    closeModal();
-    loadAll();
 }
 
 function editWatch(id) {
