@@ -365,6 +365,29 @@
             color: white;
         }
         .filter-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.05); }
+        /* ââ Login button spinner ââââââââââââââââ */
+        .btn-loading {
+            position: relative;
+            pointer-events: none;
+            color: transparent !important;
+        }
+        .btn-loading::after {
+            content: '';
+            position: absolute;
+            width: 20px; height: 20px;
+            top: 50%; left: 50%;
+            margin: -10px 0 0 -10px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .login-success-anim { animation: fadeInUp 0.4s ease-out; }
 /* ── Section visibility ─────────────────── */
         .section { display: none; }
         .section.active { display: block; }
@@ -985,7 +1008,7 @@ async function sendMagicLink() {
         return;
     }
     const btn = document.getElementById('login-btn');
-    btn.textContent = 'Sending...';
+    btn.classList.add('btn-loading');
     btn.disabled = true;
 
     try {
@@ -997,7 +1020,9 @@ async function sendMagicLink() {
         const data = await res.json();
         if (data.ok) {
             document.getElementById('login-form').style.display = 'none';
-            document.getElementById('login-sent').style.display = 'block';
+            const sentDiv = document.getElementById('login-sent');
+            sentDiv.style.display = 'block';
+            sentDiv.classList.add('login-success-anim');
             document.getElementById('login-sent-email').textContent = email;
             document.getElementById('login-error').style.display = 'none';
         } else {
@@ -1006,7 +1031,7 @@ async function sendMagicLink() {
     } catch (e) {
         showLoginError('Network error. Please try again.');
     }
-    btn.textContent = 'Send Sign-In Link';
+    btn.classList.remove('btn-loading');
     btn.disabled = false;
 }
 
