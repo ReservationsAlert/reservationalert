@@ -936,7 +936,7 @@ class APIHandler(http.server.SimpleHTTPRequestHandler):
         conn.execute("""
             INSERT INTO watches (id, user_email, watch_type, name, url, target_date, date_from, date_to,
                                  target_time, party_size, site_numbers, check_pattern, notify_via, phone, keep_watching)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             watch_id,
             email,  # Use authenticated email, not form data
